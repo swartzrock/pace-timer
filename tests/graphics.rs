@@ -74,6 +74,22 @@ fn monochrome_pixels_keep_structure_and_text_keeps_crisp_masks() {
             .iter()
             .all(|c| c.fg == Color::Reset && c.bg == Color::Reset)
     );
+    let mut contrast = Buffer::empty(Rect::new(0, 0, 2, 1));
+    paired_pixels(
+        &mut contrast,
+        Rect::new(0, 0, 2, 1),
+        0,
+        0,
+        Some(bright),
+        Some(bright),
+    );
+    put_color(&mut contrast, Rect::new(0, 0, 2, 1), 1, 0, "█", bright);
+    adapt_buffer(&mut contrast, OutputPolicy::Monochrome);
+    assert_ne!(
+        contrast[(0, 0)].symbol(),
+        contrast[(1, 0)].symbol(),
+        "pixel backgrounds must leave contrast for solid countdown strokes"
+    );
 }
 
 #[test]

@@ -56,7 +56,67 @@ PTY assertions now check actual timer bytes for all three forced color depths
 with `NO_COLOR`, and verify that `--no-color` still wins. The writer regression
 covers combined foreground/background, fragmented writes and cursor/sync controls.
 
-## Frame preparation
+## Renderer refinement — 2026-10-15
+
+The combined phase passes 60 Rust tests, including all 306 unchanged FIGlet
+fixtures, formatting, strict Clippy, release build and expanded PTY smoke.
+Semantic tests cover sub-100ms motion, bilinear arithmetic, palette/generation
+continuity, antialiased half-samples, fractional progress, clipping, deterministic
+pause behavior, soft shadows and coherent countdowns during feathered shuffle.
+The temporary review capture was removed after inspecting all 12 RGB renderers
+and four representative effects at RGB/256/16/monochrome depths. These buffer
+previews verify shape, color and text layout; native emulator appearance remains
+a manual check. Bright monochrome pixel fields leave solid blocks for text contrast.
+
+### Preparation before and after
+
+Same local release environment, 120x40, 600 warmed frames spanning ten active
+seconds. Before is `79d84fd`; after includes richer geometry and text layers.
+The adaptation column includes composition plus the slowest selected color depth.
+These measurements exclude terminal I/O and are subject to host timing noise.
+
+| Renderer | Before ms/frame | After ms/frame | After including adaptation ms/frame |
+| --- | ---: | ---: | ---: |
+| bar | 0.009 | 0.005 | 0.032 |
+| bigtext | 0.011 | 0.014 | 0.054 |
+| circles | 0.020 | 0.416 | 0.640 |
+| colorwheel | 0.032 | 0.141 | 0.287 |
+| colossal | 0.008 | 0.020 | 0.055 |
+| dots | 0.006 | 0.010 | 0.057 |
+| lava | 0.011 | 0.168 | 0.321 |
+| pie | 0.041 | 0.116 | 0.249 |
+| shuffle | 0.028 | 0.191 | 0.335 |
+| sine | 0.008 | 0.037 | 0.119 |
+| slant | 0.007 | 0.102 | 0.096 |
+| sweep | 0.018 | 0.102 | 0.206 |
+
+The richer effects cost more computation while remaining below the 16.7ms frame
+budget here. Individual runs vary, including the slant samples. Lava's first
+render in this benchmark took 10.98ms to construct maps; warmed work excludes it.
+
+### Completed output and bytes
+
+`python3 -B tests/terminal_measure.py /tmp/pace-rs-target/release/pace` drains a
+120x40 PTY and counts completed synchronized-update markers in one-second windows.
+It uses the actual release executable with FPS enabled; shuffle is sampled during
+its transition. This is receiver-observed output cadence, with window/read timing
+error, and does not establish monitor presentation rate or SSH throughput.
+
+| Renderer | Truecolor completed/s | Truecolor KiB/s | 256 completed/s | 256 KiB/s |
+| --- | ---: | ---: | ---: | ---: |
+| bar | 59.96 | 5.16 | 60.00 | 3.02 |
+| bigtext | 60.00 | 3.66 | 60.00 | 2.68 |
+| colorwheel | 59.98 | 3989.64 | 59.97 | 628.75 |
+| lava | 60.00 | 4657.18 | 58.92 | 1411.34 |
+| shuffle | 59.89 | 2675.41 | 59.84 | 1101.31 |
+
+Colorwheel measured 60.00 completed/s and 104.73 KiB/s at 16 colors, and 59.97
+completed/s and 38.37 KiB/s in monochrome. First observed completions, including
+process/setup, were 3.25–5.07ms for representative non-lava runs and 15.63–17.01ms
+for lava. More color increases output volume; the optional FPS footer exposes
+slower delivered loops on other terminal connections.
+
+## Historical port frame preparation
 
 Release mode; 120x40 buffer; 600 frames per renderer after warming. Includes
 buffer reset and renderer composition. Excludes terminal writes, emulator

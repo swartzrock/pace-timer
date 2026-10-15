@@ -146,6 +146,47 @@ pass. Focused review `20261015-144350-1d2be19e` found no defects. The all-render
 preview was refreshed; `visuals/lava-256-preview.png` shows the actual 256-color
 buffer at six seconds. Appearance and motion in the user's emulator remain manual.
 
+### Indexed output throughput at 210x78
+
+Following a report of approximately 23 completed draws/s in macOS Terminal versus
+60 in Warp, the output path was profiled at the reported 210-column, 78-row size.
+CPU-only rendering, color adaptation, diffing and encoding took approximately
+1–2ms/frame; this excludes terminal writes and emulator painting. The original
+stream repeats both colors when either changes and prints solid pixels as Unicode
+halfblocks. These increase the work sent to the terminal.
+
+The Unix indexed path now emits only changed visible colors, uses background spaces
+for solid paired pixels, uses shorter same-row cursor movements, and batches a
+draw into one write request. RGB, basic ANSI, monochrome and styled-cell output
+retain the Crossterm path. The reusable output buffer is bounded by one draw.
+Other platforms retain Crossterm's native console handling for every color depth.
+Scheduling, FPS accounting, renderer samples and chosen palettes are unchanged.
+
+`cargo test --release --lib measure_lava_output -- --ignored --nocapture` compares
+both encoders on the exact same 180 lava frames, including the initial full draw:
+
+| Viewport | Original bytes/frame | Compact bytes/frame | Reduction |
+| --- | ---: | ---: | ---: |
+| 120x40 | 9914 | 5955 | 39.9% |
+| 210x78 | 34369 | 19747 | 42.5% |
+
+Palette choices vary by process, so absolute byte counts vary; each comparison
+uses the same renderer and frame sequence for both encoders. The draining PTY
+samples at 210x78 reached approximately 60 completed draws/s after the change;
+they do not measure native Terminal painting. Launching native Terminal through
+automation failed in this session. The user then retested the rebuilt binary in
+the same 210x78 macOS Terminal window and reported 60 FPS, up from approximately
+23, with the image unchanged. This confirms the improvement for that setup.
+
+The output-budget regression first failed at 71599 bytes before the compact path
+was implemented. New tests decode indexed cursor/SGR streams from both encoders
+and compare visible glyphs and upper/lower color samples across all 12 renderers,
+multiple times and two viewports. They also cover sparse row changes, complete
+color reset, RGB/styled fallback, partial writes and error propagation. All 65
+Rust tests, formatting, strict Clippy, release build and expanded PTY smoke pass.
+Review `20261015-153400-e88cc103` found a Windows console fallback regression;
+restricting the compact path to Unix preserves the existing Windows behavior.
+
 ## Historical port frame preparation
 
 Release mode; 120x40 buffer; 600 frames per renderer after warming. Includes

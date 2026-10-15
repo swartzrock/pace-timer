@@ -114,11 +114,12 @@ Measure warmed frame preparation separately from terminal output:
 
 ```sh
 cargo test --release --test renderers measure_frame_preparation -- --ignored --nocapture
+cargo test --release --lib measure_lava_output -- --ignored --nocapture
 python3 -B tests/terminal_measure.py target/release/pace
 ```
 
-The Rust measurement reports initial render work, warmed composition, and final
-color adaptation separately. The PTY measurement reports observed completed-write
+The Rust measurements report render work, color adaptation and a comparison of
+encoded lava bytes. The PTY measurement reports observed completed-write
 cadence and output bytes, including a shuffle transition. Neither measures emulator
 painting. Visible smoothness depends on terminal size, emulator,
 and font settings. For a visual check, run `1m sine`, `1m lava`, and `2m shuffle`;

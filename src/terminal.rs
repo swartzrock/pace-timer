@@ -2,6 +2,7 @@ use crate::{
     color::{OutputPolicy, adapt_buffer},
     graphics::centered_text,
     model::{Clock, FrameRate, FrameSchedule, TimerDetails},
+    output::OutputBackend,
     renderers::{Renderers, paused_overlay},
 };
 use crossterm::{
@@ -15,7 +16,6 @@ use crossterm::{
 };
 use ratatui::{
     Terminal,
-    backend::CrosstermBackend,
     buffer::Buffer,
     layout::Rect,
     style::{Color, Style},
@@ -30,7 +30,7 @@ use std::{
 };
 
 struct Session {
-    terminal: Terminal<CrosstermBackend<ColorWriter<Stdout>>>,
+    terminal: Terminal<OutputBackend<ColorWriter<Stdout>>>,
 }
 
 /// Crossterm encodes even named colors as indexed SGR. Basic terminals need ANSI SGR.
@@ -119,7 +119,8 @@ impl Session {
                 pending: Vec::new(),
             };
             execute!(out, EnterAlternateScreen, Hide)?;
-            Terminal::new(CrosstermBackend::new(out)).map(|terminal| Self { terminal })
+            Terminal::new(OutputBackend::new(out, policy == OutputPolicy::Ansi256))
+                .map(|terminal| Self { terminal })
         })();
         if result.is_err() {
             restore();

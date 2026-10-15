@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod color;
 pub mod effects;
 pub mod fonts;
 pub mod graphics;

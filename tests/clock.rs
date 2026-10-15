@@ -6,7 +6,7 @@ fn countdown_uses_elapsed_time_rather_than_rendered_frames() {
     let start = Instant::now();
     let clock = Clock::new(Duration::from_secs(10), start);
     let details = clock.details(start + Duration::from_millis(1750));
-    assert_eq!(details.remaining_text(), "0:09");
+    assert_eq!(details.remaining_text(), "0:08");
     assert_eq!(details.elapsed_text(), "0:01");
     assert!((details.progress() - 0.175).abs() < 0.0001);
     assert!(clock.finished(start + Duration::from_secs(11)));
@@ -43,5 +43,40 @@ fn time_display_and_progress_clamp_at_completion() {
         }
         .progress(),
         1.0
+    );
+}
+
+#[test]
+fn late_frames_are_skipped_instead_of_replayed() {
+    use pace::model::{FRAME_INTERVAL, FrameSchedule};
+    let now = Instant::now();
+    let mut schedule = FrameSchedule { next: now };
+    schedule.advance(now + Duration::from_millis(90));
+    assert_eq!(
+        schedule.next,
+        now + Duration::from_millis(90) + FRAME_INTERVAL
+    );
+    let next = schedule.next;
+    schedule.advance(next);
+    assert_eq!(schedule.next, next + FRAME_INTERVAL);
+}
+
+#[test]
+fn remaining_seconds_round_down_as_in_the_original_cli() {
+    assert_eq!(
+        TimerDetails {
+            elapsed: 0.1,
+            duration: 2.0
+        }
+        .remaining_text(),
+        "0:01"
+    );
+    assert_eq!(
+        TimerDetails {
+            elapsed: 1.1,
+            duration: 2.0
+        }
+        .remaining_text(),
+        "0:00"
     );
 }

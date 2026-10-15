@@ -1,5 +1,36 @@
 use std::time::{Duration, Instant};
 
+pub const RENDERER_NAMES: &[&str] = &[
+    "bar",
+    "bigtext",
+    "circles",
+    "colorwheel",
+    "colossal",
+    "dots",
+    "lava",
+    "pie",
+    "shuffle",
+    "sine",
+    "slant",
+    "sweep",
+];
+
+pub const FRAME_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / 60);
+
+/// A late frame is skipped; it never becomes a burst of catch-up renders.
+pub struct FrameSchedule {
+    pub next: Instant,
+}
+
+impl FrameSchedule {
+    pub fn advance(&mut self, now: Instant) {
+        self.next += FRAME_INTERVAL;
+        if self.next <= now {
+            self.next = now + FRAME_INTERVAL;
+        }
+    }
+}
+
 /// Animation phase and countdown progress use active elapsed time, never frame counts.
 #[derive(Clone, Copy, Debug)]
 pub struct TimerDetails {
@@ -17,7 +48,7 @@ impl TimerDetails {
     }
 
     pub fn remaining_text(self) -> String {
-        format_time((self.duration - self.elapsed).max(0.0).ceil() as u64)
+        format_time((self.duration - self.elapsed).max(0.0).floor() as u64)
     }
 
     pub fn elapsed_text(self) -> String {

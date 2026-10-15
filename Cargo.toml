@@ -8,8 +8,8 @@ license = "ISC"
 [dependencies]
 crossterm = "0.29"
 ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
-figlet-rs = "0.1.5"
 rand = "0.9"
+signal-hook = "0.3"
 
 [profile.release]
 lto = "thin"

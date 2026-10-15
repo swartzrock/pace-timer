@@ -1,0 +1,8 @@
+ 2)AAA   3)###      Q)qqqq          ##         k)         f)FFF                                 
+2)   AA 3)   ##    Q)    qq                    k)        f)                                     
+    2)     3)#     Q)    qq u)   UU i)  c)CCCC k)  KK    f)FFF   o)OOO  x)   XX e)EEEEE  s)SSSS 
+   2)        3)    Q)  qq q u)   UU i) c)      k)KK      f)     o)   OO   x)X   e)EEEE  s)SSSS  
+  2)    3)   ##    Q)   qq  u)   UU i) c)      k) KK     f)     o)   OO   x)X   e)           s) 
+2)AAAAA  3)###      Q)qqq q  u)UUU  i)  c)CCCC k)  KK    f)      o)OOO  x)   XX  e)EEEE s)SSSS  
+                                                                                                
+                                                                                                

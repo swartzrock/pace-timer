@@ -63,12 +63,12 @@ pub fn double_box(buf: &mut Buffer, area: Rect, fg: u8) {
     }
 }
 
-pub fn inset(area: Rect, x: u16, y: u16) -> Rect {
+pub fn centered(area: Rect, width: u16, height: u16) -> Rect {
     Rect::new(
-        area.x + x.min(area.width),
-        area.y + y.min(area.height),
-        area.width.saturating_sub(x.saturating_mul(2)),
-        area.height.saturating_sub(y.saturating_mul(2)),
+        area.x + area.width.saturating_sub(width) / 2,
+        area.y + area.height.saturating_sub(height) / 2,
+        width.min(area.width),
+        height.min(area.height),
     )
 }
 

@@ -1,3 +1,9 @@
+pub mod cli;
+pub mod effects;
+pub mod fonts;
 pub mod graphics;
 pub mod model;
 pub mod palette;
+pub mod renderers;
+pub mod terminal;
+pub mod tools;

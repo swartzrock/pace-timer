@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""Exercise the actual binary in a Unix PTY; no terminal emulator or server needed."""
+import fcntl
+import os
+import pathlib
+import pty
+import select
+import signal
+import struct
+import subprocess
+import sys
+import termios
+import time
+
+
+class Timer:
+    def __init__(self, executable, *args):
+        self.master, self.slave = pty.openpty()
+        self.resize(100, 35)
+        self.original = termios.tcgetattr(self.slave)
+        self.output = bytearray()
+        self.started = time.monotonic()
+        self.process = subprocess.Popen(
+            [executable, *args], stdin=self.slave, stdout=self.slave,
+            stderr=self.slave, start_new_session=True,
+            env={**os.environ, "TERM": "xterm-256color"},
+        )
+
+    def resize(self, width, height):
+        fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", height, width, 0, 0))
+        if hasattr(self, "process"):
+            self.process.send_signal(signal.SIGWINCH)
+
+    def drain(self, duration):
+        until = time.monotonic() + duration
+        while time.monotonic() < until:
+            if select.select([self.master], [], [], max(0, until - time.monotonic()))[0]:
+                self.output.extend(os.read(self.master, 65536))
+
+    def finish(self):
+        try:
+            deadline = time.monotonic() + 4
+            while self.process.poll() is None and time.monotonic() < deadline:
+                self.drain(0.03)
+            assert self.process.poll() is not None, "timer did not exit"
+            self.drain(0.02)
+            assert self.process.returncode == 0, bytes(self.output[-2000:])
+            assert b"\x1b[?1049h" in self.output, "alternate screen never entered"
+            assert b"\x1b[?1049l" in self.output, "alternate screen never restored"
+            assert b"\x1b[?25h" in self.output, "cursor never restored"
+            assert b"panicked" not in self.output
+            assert termios.tcgetattr(self.slave) == self.original, "terminal mode not restored"
+            return time.monotonic() - self.started
+        finally:
+            if self.process.poll() is None:
+                self.process.kill()
+                self.process.wait()
+            os.close(self.master)
+            os.close(self.slave)
+
+
+def main():
+    executable = str(pathlib.Path(sys.argv[1]).resolve())
+    renderers = ["bar", "bigtext", "circles", "colorwheel", "colossal", "dots", "lava", "pie", "shuffle", "sine", "slant", "sweep"]
+    for renderer in renderers:
+        timer = Timer(executable, "0.12s", renderer)
+        elapsed = timer.finish()
+        assert elapsed < 1.5, (renderer, elapsed)
+    print("PASS: all 12 renderers complete and restore terminal modes")
+
+    timer = Timer(executable, "timer", "0.8s", "sine")
+    timer.drain(0.2)
+    os.write(timer.master, b" ")
+    timer.drain(0.45)
+    assert timer.process.poll() is None
+    os.write(timer.master, b" ")
+    elapsed = timer.finish()
+    assert 1.15 < elapsed < 2.2, elapsed
+    print("PASS: space pauses/resumes countdown and animation")
+
+    timer = Timer(executable, "10s:shuffle")
+    timer.drain(0.15)
+    timer.resize(1, 1)
+    timer.drain(0.12)
+    timer.resize(160, 50)
+    timer.drain(0.12)
+    os.write(timer.master, b"\x03")
+    timer.finish()
+    print("PASS: resize to 1x1 and back, Ctrl-C restores terminal")
+
+    timer = Timer(executable, "10s", "lava")
+    timer.drain(0.2)
+    timer.process.send_signal(signal.SIGTERM)
+    timer.finish()
+    print("PASS: SIGTERM restores terminal")
+
+
+if __name__ == "__main__":
+    main()

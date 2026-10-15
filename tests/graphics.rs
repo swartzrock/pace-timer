@@ -97,13 +97,18 @@ fn monochrome_effects_retain_progress_outside_the_countdown() {
             adapt_buffer(&mut buf, OutputPolicy::Monochrome);
             states.push(buf);
         }
-        let filled = if name == "dots" { "●" } else { "█" };
         let count = |buffer: &Buffer| {
             buffer
                 .content
                 .iter()
-                .filter(|cell| cell.symbol() == filled)
-                .count()
+                .map(|cell| match cell.symbol() {
+                    "█" | "●" => 4,
+                    "▓" | "◕" => 3,
+                    "▒" | "▀" | "▄" | "◑" => 2,
+                    "░" | "◔" => 1,
+                    _ => 0,
+                })
+                .sum::<u32>()
         };
         assert!(
             count(&states[0]) < count(&states[1]),

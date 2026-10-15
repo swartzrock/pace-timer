@@ -94,6 +94,11 @@ The richer effects cost more computation while remaining below the 16.7ms frame
 budget here. Individual runs vary, including the slant samples. Lava's first
 render in this benchmark took 10.98ms to construct maps; warmed work excludes it.
 
+The final simplification skips lighting calculations for uncovered circle samples.
+Repeating the same release workload measured circles at 0.188ms/frame before
+adaptation and 0.443ms/frame at the slowest depth, down from 0.416/0.640ms above.
+The output pixels are unchanged; all 60 tests, strict Clippy and PTY checks still pass.
+
 ### Completed output and bytes
 
 `python3 -B tests/terminal_measure.py /tmp/pace-rs-target/release/pace` drains a
@@ -110,11 +115,17 @@ error, and does not establish monitor presentation rate or SSH throughput.
 | lava | 60.00 | 4657.18 | 58.92 | 1411.34 |
 | shuffle | 59.89 | 2675.41 | 59.84 | 1101.31 |
 
-Colorwheel measured 60.00 completed/s and 104.73 KiB/s at 16 colors, and 59.97
-completed/s and 38.37 KiB/s in monochrome. First observed completions, including
+Colorwheel measured 60.00 completed/s and 104.73 KiB/s at 16 colors, and 59.91
+completed/s and 26.91 KiB/s in monochrome after the text-contrast adjustment.
+First observed completions, including
 process/setup, were 3.25–5.07ms for representative non-lava runs and 15.63–17.01ms
 for lava. More color increases output volume; the optional FPS footer exposes
 slower delivered loops on other terminal connections.
+
+Phase-2 review `20261015-142123-7fc9bc92` found no actionable defects or unmet
+requirements. Deterministic shuffle coverage does not force every combination of
+text/geometric countdown classifications; native emulator appearance also remains
+a manual check. Final-head CI results are recorded on the renderer PR.
 
 ## Historical port frame preparation
 

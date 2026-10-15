@@ -113,6 +113,9 @@ impl Effects {
                         let dy = f64::from(row * 2 + half) - y;
                         let distance = dx.hypot(dy);
                         let coverage = (circle.radius + 0.5 - distance).clamp(0.0, 1.0);
+                        if coverage == 0.0 {
+                            continue;
+                        }
                         let light = (0.72 - (dx + dy) / (circle.radius * 5.0)).clamp(0.35, 1.0);
                         let lit = mix(indexed_rgb(circle.color), Color::White, light * 0.3);
                         color = mix(color, lit, coverage * light * fade);

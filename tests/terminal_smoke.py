@@ -4,6 +4,7 @@ import fcntl
 import os
 import pathlib
 import pty
+import re
 import select
 import signal
 import struct
@@ -93,6 +94,31 @@ def main():
     timer.process.send_signal(signal.SIGTERM)
     timer.finish()
     print("PASS: SIGTERM restores terminal")
+
+    timer = Timer(executable, "3s", "sine", "--show-fps", "--no-color")
+    timer.drain(0.25)
+    # The diff backend may encode the label's separating space as cursor movement.
+    assert b"FPS" in timer.output and b"--" in timer.output, "FPS warmup not displayed"
+    assert re.search(rb"\d{1,3}\.\d", timer.output), "measured FPS not displayed"
+    os.write(timer.master, b" ")
+    timer.drain(0.15)
+    assert b"paused" in timer.output, "paused FPS state not displayed"
+    timer.resize(12, 1)
+    timer.drain(0.1)
+    timer.resize(100, 35)
+    timer.drain(0.1)
+    mark = len(timer.output)
+    os.write(timer.master, b" ")
+    timer.drain(0.15)
+    assert b"--" in timer.output[mark:], "resume did not reset FPS warmup"
+    os.write(timer.master, b"\x03")
+    timer.finish()
+    assert not re.search(rb"\x1b\[(?:38|48);", timer.output), "monochrome timer emitted color"
+    print("PASS: FPS warmup, measured cadence, pause/resume, tiny resize and monochrome")
+
+    timer = Timer(executable, "0.12s", "pie")
+    timer.finish()
+    assert b"FPS" not in timer.output, "FPS should default off"
 
 
 if __name__ == "__main__":

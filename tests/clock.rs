@@ -80,3 +80,28 @@ fn remaining_seconds_round_down_as_in_the_original_cli() {
         "0:00"
     );
 }
+#[test]
+fn fps_measures_completed_intervals_including_slow_frames() {
+    use pace::model::FrameRate;
+    let start = std::time::Instant::now();
+    let mut fps = FrameRate::default();
+    assert_eq!(fps.label(), "FPS --");
+    fps.record(start);
+    assert_eq!(fps.label(), "FPS --");
+    for frame in 1..=60 {
+        fps.record(start + std::time::Duration::from_secs_f64(frame as f64 / 60.0));
+    }
+    assert!((fps.rate().unwrap() - 60.0).abs() < 0.01);
+    fps.record(start + std::time::Duration::from_secs(3));
+    assert!((fps.rate().unwrap() - 0.5).abs() < 0.001);
+    fps.set_paused(true);
+    fps.record(start + std::time::Duration::from_secs(4));
+    assert_eq!(fps.label(), "FPS paused");
+    fps.set_paused(false);
+    assert_eq!(fps.label(), "FPS --");
+    fps.record(start + std::time::Duration::from_secs(5));
+    fps.record(start + std::time::Duration::from_secs(5));
+    assert_eq!(fps.label(), "FPS --");
+    fps.record(start + std::time::Duration::from_secs_f64(5.0 + 1.0 / 30.0));
+    assert!((fps.rate().unwrap() - 30.0).abs() < 0.01);
+}

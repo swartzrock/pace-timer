@@ -1,7 +1,7 @@
 use crate::{
     color::{OutputPolicy, adapt_buffer},
     graphics::centered_text,
-    model::{Clock, FrameSchedule, TimerDetails},
+    model::{Clock, FrameRate, FrameSchedule, TimerDetails},
     renderers::{Renderers, paused_overlay},
 };
 use crossterm::{
@@ -64,7 +64,7 @@ fn restore() {
     let _ = terminal::disable_raw_mode();
 }
 
-pub fn run(duration: Duration, name: &str, policy: OutputPolicy) -> io::Result<()> {
+pub fn run(duration: Duration, name: &str, policy: OutputPolicy, show_fps: bool) -> io::Result<()> {
     if !io::stdout().is_terminal() || !io::stdin().is_terminal() {
         return Err(io::Error::other(
             "The timer needs an interactive terminal on stdin and stdout",
@@ -91,7 +91,7 @@ pub fn run(duration: Duration, name: &str, policy: OutputPolicy) -> io::Result<(
         restore();
         previous_hook(info);
     }));
-    let result = run_loop(duration, name, policy, &interrupted);
+    let result = run_loop(duration, name, policy, show_fps, &interrupted);
     #[cfg(unix)]
     for signal in signals {
         signal_hook::low_level::unregister(signal);
@@ -103,6 +103,7 @@ fn run_loop(
     duration: Duration,
     name: &str,
     policy: OutputPolicy,
+    show_fps: bool,
     interrupted: &AtomicBool,
 ) -> io::Result<()> {
     let mut session = Session::enter()?;
@@ -110,6 +111,7 @@ fn run_loop(
     let started = Instant::now();
     let mut clock = Clock::new(duration, started);
     let mut frames = FrameSchedule { next: started };
+    let mut fps = FrameRate::default();
     let mut dirty = true;
     loop {
         let now = Instant::now();
@@ -119,6 +121,7 @@ fn run_loop(
         if dirty || (!clock.is_paused() && now >= frames.next) {
             let details = clock.details(now);
             let paused = clock.is_paused();
+            let fps_label = show_fps.then(|| fps.label());
             execute!(session.terminal.backend_mut(), BeginSynchronizedUpdate)?;
             let draw = session
                 .terminal
@@ -129,6 +132,7 @@ fn run_loop(
                         name,
                         details,
                         paused,
+                        fps_label.as_deref(),
                         area,
                         frame.buffer_mut(),
                     );
@@ -139,7 +143,11 @@ fn run_loop(
             let end = execute!(session.terminal.backend_mut(), EndSynchronizedUpdate);
             draw?;
             end?;
-            frames.advance(Instant::now());
+            let completed = Instant::now();
+            if show_fps {
+                fps.record(completed);
+            }
+            frames.advance(completed);
             dirty = false;
             if clock.finished(now) {
                 return Ok(());
@@ -164,6 +172,7 @@ fn run_loop(
                     }
                     if key.code == KeyCode::Char(' ') {
                         clock.toggle_pause(Instant::now());
+                        fps.set_paused(clock.is_paused());
                         dirty = true;
                         frames.next = Instant::now();
                     }
@@ -175,22 +184,33 @@ fn run_loop(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compose(
     renderers: &mut Renderers,
     name: &str,
     details: TimerDetails,
     paused: bool,
+    fps: Option<&str>,
     area: Rect,
     buf: &mut Buffer,
 ) {
     let status = renderers.status(name, details);
-    let show_status = area.height > 1 && (details.elapsed < 7.0 || !status.is_empty());
+    let fps = fps.filter(|label| label.len() <= usize::from(area.width) && area.height > 1);
+    let status_width = fps.map_or(area.width, |label| {
+        area.width.saturating_sub(label.len() as u16 + 1)
+    });
+    let show_status =
+        area.height > 1 && status_width >= 8 && (details.elapsed < 7.0 || !status.is_empty());
+    let show_footer = show_status || fps.is_some();
     let content = Rect {
-        height: area.height.saturating_sub(u16::from(show_status)),
+        height: area.height.saturating_sub(u16::from(show_footer)),
         ..area
     };
     renderers.render(name, details, content, buf);
-    if show_status {
+    if paused {
+        paused_overlay(buf, content);
+    }
+    if show_footer {
         let y = area.bottom() - 1;
         let bg = if details.elapsed < 3.5 {
             234
@@ -202,25 +222,94 @@ fn compose(
                 .set_symbol(" ")
                 .set_style(Style::default().bg(Color::Indexed(bg)));
         }
-        let message = if status.is_empty() {
-            format!(
-                "Starting a {} timer with the '{name}' renderer. Press <space> to pause.",
-                crate::model::format_time(details.duration as u64)
-            )
-        } else {
-            status
-        };
-        let clipped: String = message.chars().take(usize::from(area.width)).collect();
-        centered_text(buf, Rect::new(area.x, y, area.width, 1), 0, &clipped, 117);
-    }
-    if paused {
-        paused_overlay(buf, area);
+        if show_status {
+            let message = if status.is_empty() {
+                format!(
+                    "Starting a {} timer with the '{name}' renderer. Press <space> to pause.",
+                    crate::model::format_time(details.duration as u64)
+                )
+            } else {
+                status
+            };
+            let clipped: String = message.chars().take(usize::from(status_width)).collect();
+            centered_text(buf, Rect::new(area.x, y, status_width, 1), 0, &clipped, 117);
+        }
+        if let Some(label) = fps {
+            let x = area.right() - label.len() as u16;
+            crate::graphics::text(
+                buf,
+                Rect::new(x, y, label.len() as u16, 1),
+                0,
+                0,
+                label,
+                250,
+            );
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fps_footer_is_right_aligned_and_keeps_countdown_in_content() {
+        for width in [1, 8, 12, 80] {
+            for height in [1, 2, 24] {
+                for label in ["FPS --", "FPS 30.0", "FPS paused"] {
+                    let area = Rect::new(3, 2, width, height);
+                    let mut buf = Buffer::empty(Rect::new(0, 0, 90, 30));
+                    compose(
+                        &mut Renderers::new(),
+                        "bigtext",
+                        TimerDetails {
+                            elapsed: 0.0,
+                            duration: 5.0,
+                        },
+                        false,
+                        Some(label),
+                        area,
+                        &mut buf,
+                    );
+                    let last: String = (area.x..area.right())
+                        .map(|x| buf[(x, area.bottom() - 1)].symbol())
+                        .collect();
+                    if height > 1 && label.len() <= usize::from(width) {
+                        assert!(last.ends_with(label), "{area:?}: {last:?}");
+                    } else {
+                        assert!(!last.contains("FPS"));
+                    }
+                    if width == 12 && height <= 2 {
+                        let text: String = buf.content.iter().map(|cell| cell.symbol()).collect();
+                        assert!(text.contains("0:05"), "{area:?}: {text}");
+                    }
+                    for y in 0..30 {
+                        for x in 0..90 {
+                            if !area.contains((x, y).into()) {
+                                assert_eq!(buf[(x, y)].symbol(), " ");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let area = Rect::new(0, 0, 80, 24);
+        let mut buf = Buffer::empty(area);
+        compose(
+            &mut Renderers::new(),
+            "sine",
+            TimerDetails {
+                elapsed: 10.0,
+                duration: 60.0,
+            },
+            true,
+            Some("FPS paused"),
+            area,
+            &mut buf,
+        );
+        let text: String = buf.content.iter().map(|c| c.symbol()).collect();
+        assert!(text.contains("PAUSED") && text.contains("FPS paused"));
+    }
 
     #[test]
     fn small_terminal_keeps_readable_countdown_alongside_status() {
@@ -235,6 +324,7 @@ mod tests {
                     duration: 5.0,
                 },
                 false,
+                None,
                 area,
                 &mut buffer,
             );

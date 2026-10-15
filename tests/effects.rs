@@ -1,5 +1,5 @@
 use pace::{effects::Effects, model::TimerDetails};
-use ratatui::{buffer::Buffer, layout::Rect, style::Color};
+use ratatui::{buffer::Buffer, layout::Rect};
 
 const EFFECTS: [&str; 8] = [
     "bar",
@@ -100,23 +100,23 @@ fn source_symbols_and_progress_colors_are_preserved() {
         assert!(
             bar.content
                 .iter()
-                .any(|cell| cell.symbol() == "█" && cell.fg == Color::Indexed(color))
+                .any(|cell| cell.symbol() == "█" && cell.fg == pace::color::indexed_rgb(color))
         );
         assert!(
             bar.content
                 .iter()
-                .any(|cell| cell.symbol() == "░" && cell.fg == Color::Indexed(239))
+                .any(|cell| cell.symbol() == "░" && cell.fg == pace::color::indexed_rgb(239))
         );
         let dots = draw(&mut effects, "dots", elapsed, area);
         assert!(
             dots.content
                 .iter()
-                .any(|cell| cell.symbol() == "●" && cell.fg == Color::Indexed(color))
+                .any(|cell| cell.symbol() == "●" && cell.fg == pace::color::indexed_rgb(color))
         );
         assert!(
             dots.content
                 .iter()
-                .any(|cell| cell.symbol() == "●" && cell.fg == Color::Indexed(232))
+                .any(|cell| cell.symbol() == "●" && cell.fg == pace::color::indexed_rgb(232))
         );
         assert!(dots.content.iter().any(|cell| cell.symbol() == "╔"));
     }

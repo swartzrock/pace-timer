@@ -1,4 +1,5 @@
 use crate::{
+    color::{OutputPolicy, adapt_buffer},
     graphics::centered_text,
     model::{Clock, FrameSchedule, TimerDetails},
     renderers::{Renderers, paused_overlay},
@@ -63,7 +64,7 @@ fn restore() {
     let _ = terminal::disable_raw_mode();
 }
 
-pub fn run(duration: Duration, name: &str) -> io::Result<()> {
+pub fn run(duration: Duration, name: &str, policy: OutputPolicy) -> io::Result<()> {
     if !io::stdout().is_terminal() || !io::stdin().is_terminal() {
         return Err(io::Error::other(
             "The timer needs an interactive terminal on stdin and stdout",
@@ -90,7 +91,7 @@ pub fn run(duration: Duration, name: &str) -> io::Result<()> {
         restore();
         previous_hook(info);
     }));
-    let result = run_loop(duration, name, &interrupted);
+    let result = run_loop(duration, name, policy, &interrupted);
     #[cfg(unix)]
     for signal in signals {
         signal_hook::low_level::unregister(signal);
@@ -98,7 +99,12 @@ pub fn run(duration: Duration, name: &str) -> io::Result<()> {
     result
 }
 
-fn run_loop(duration: Duration, name: &str, interrupted: &AtomicBool) -> io::Result<()> {
+fn run_loop(
+    duration: Duration,
+    name: &str,
+    policy: OutputPolicy,
+    interrupted: &AtomicBool,
+) -> io::Result<()> {
     let mut session = Session::enter()?;
     let mut renderers = Renderers::new();
     let started = Instant::now();
@@ -126,6 +132,7 @@ fn run_loop(duration: Duration, name: &str, interrupted: &AtomicBool) -> io::Res
                         area,
                         frame.buffer_mut(),
                     );
+                    adapt_buffer(frame.buffer_mut(), policy);
                 })
                 .map(|_| ());
             // Close the synchronized update even if drawing failed.

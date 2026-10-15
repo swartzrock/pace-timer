@@ -205,6 +205,28 @@ fn nearest_index(rgb: (u8, u8, u8)) -> u8 {
 /// Adapt final colors, retaining text and shape symbols.
 pub fn adapt_buffer(buffer: &mut Buffer, policy: OutputPolicy) {
     for cell in &mut buffer.content {
+        if policy == OutputPolicy::Monochrome && matches!(cell.symbol(), "▀" | "▄") {
+            let light = |color| {
+                color_rgb(color).map_or(0.0, |(r, g, b)| {
+                    (0.2126 * f64::from(r) + 0.7152 * f64::from(g) + 0.0722 * f64::from(b)) / 255.0
+                })
+            };
+            let (upper, lower) = if cell.symbol() == "▀" {
+                (light(cell.fg), light(cell.bg))
+            } else {
+                (light(cell.bg), light(cell.fg))
+            };
+            let symbol = if upper.max(lower) < 0.06 {
+                " "
+            } else if upper > lower + 0.15 {
+                "▀"
+            } else if lower > upper + 0.15 {
+                "▄"
+            } else {
+                ["░", "▒", "▓", "█"][(((upper + lower) * 0.5 * 4.0) as usize).min(3)]
+            };
+            cell.set_symbol(symbol);
+        }
         cell.fg = policy.adapt(cell.fg);
         cell.bg = policy.adapt(cell.bg);
     }

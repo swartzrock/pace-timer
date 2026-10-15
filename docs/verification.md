@@ -1,6 +1,6 @@
 # Local verification
 
-Verified on macOS with Rust 1.99.0. The independent sibling `pace-ts` checkout
+Historical port verification on macOS with Rust 1.99.0. The independent sibling `pace-ts` checkout
 remained clean on `main` at `9f49953`. This repository has no remote; nothing was
 published.
 
@@ -22,6 +22,30 @@ The Codex sandbox blocked Cargo's temporary-directory cleanup inside the new
 project, including after escalation. Building in `/tmp/pace-rs-target` succeeded;
 the verified release executable was copied to `target/release/pace` (3.4 MiB).
 This is a local build-environment limitation, not a Cargo configuration change.
+
+## Adaptive color and FPS foundation — 2026-10-15
+
+The first visual-improvement phase passes 44 Rust tests, formatting, strict
+Clippy, release build and the expanded Unix PTY smoke test. Builds used
+`--target-dir /tmp/pace-rs-target` for the local sandbox limitation above.
+The original 306 FIGlet outputs still pass without font/parser/asset changes.
+
+New coverage checks captured capability/override precedence, nearest palette
+quantization, foreground/background serialization, all tool output paths,
+paired pixels, monochrome shape preservation, successful-frame timing math,
+and countdown/footer layout down to one-row and offset viewports. The PTY
+exercises FPS warmup, measured cadence, pause/resume reset, tiny resize,
+monochrome output, default-off behavior and terminal restoration.
+
+Proof-first checks initially failed for the missing pixel and FPS APIs, then
+passed after implementation. The legacy CLI was characterized before changing
+its parser. Monochrome font art exposed two lines that resembled catalog
+headers; the catalog assertion now recognizes the complete header format.
+
+The Rust workflow runs test and release PTY checks on Linux and macOS and
+formatting/Clippy on Linux. It accepts every pull-request base, including the
+second branch of the visual-improvement stack. CI results belong to each PR's
+current head; local verification does not substitute for those checks.
 
 ## Frame preparation
 

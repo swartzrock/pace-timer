@@ -18,6 +18,13 @@ fn help_lists_every_original_renderer_and_tools() {
     for name in ["preview", "allfonts", "colorblocks", "version"] {
         assert!(text.contains(name));
     }
+    for option in [
+        "--show-fps",
+        "--no-color",
+        "--color-depth auto|truecolor|256|16",
+    ] {
+        assert!(text.contains(option));
+    }
 }
 
 #[test]

@@ -227,16 +227,16 @@ fn every_tool_honors_pipe_explicit_depth_and_no_color() {
                 "mono" => assert!(!text.contains('\x1b'), "{tool}"),
                 "rgb" => {
                     assert!(text.contains("38;2;"), "{tool}");
-                    assert!(!text.contains(";5;"));
+                    assert!(!text.contains("\x1b[38;5;") && !text.contains("\x1b[48;5;"));
                 }
                 "256" => {
                     assert!(text.contains("38;5;"), "{tool}");
-                    assert!(!text.contains(";2;"));
+                    assert!(!text.contains("\x1b[38;2;") && !text.contains("\x1b[48;2;"));
                 }
                 "16" => {
                     assert!(text.contains('\x1b'), "{tool}");
-                    assert!(!text.contains("38;"));
-                    assert!(!text.contains("48;"));
+                    assert!(!text.contains("\x1b[38;"));
+                    assert!(!text.contains("\x1b[48;"));
                 }
                 _ => unreachable!(),
             }

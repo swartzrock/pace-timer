@@ -74,6 +74,22 @@ fn monochrome_pixels_keep_structure_and_text_keeps_crisp_masks() {
             .iter()
             .all(|c| c.fg == Color::Reset && c.bg == Color::Reset)
     );
+    let mut contrast = Buffer::empty(Rect::new(0, 0, 2, 1));
+    paired_pixels(
+        &mut contrast,
+        Rect::new(0, 0, 2, 1),
+        0,
+        0,
+        Some(bright),
+        Some(bright),
+    );
+    put_color(&mut contrast, Rect::new(0, 0, 2, 1), 1, 0, "█", bright);
+    adapt_buffer(&mut contrast, OutputPolicy::Monochrome);
+    assert_ne!(
+        contrast[(0, 0)].symbol(),
+        contrast[(1, 0)].symbol(),
+        "pixel backgrounds must leave contrast for solid countdown strokes"
+    );
 }
 
 #[test]
@@ -97,13 +113,18 @@ fn monochrome_effects_retain_progress_outside_the_countdown() {
             adapt_buffer(&mut buf, OutputPolicy::Monochrome);
             states.push(buf);
         }
-        let filled = if name == "dots" { "●" } else { "█" };
         let count = |buffer: &Buffer| {
             buffer
                 .content
                 .iter()
-                .filter(|cell| cell.symbol() == filled)
-                .count()
+                .map(|cell| match cell.symbol() {
+                    "█" | "●" => 4,
+                    "▓" | "◕" => 3,
+                    "▒" | "▀" | "▄" | "◑" => 2,
+                    "░" | "◔" => 1,
+                    _ => 0,
+                })
+                .sum::<u32>()
         };
         assert!(
             count(&states[0]) < count(&states[1]),

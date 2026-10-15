@@ -4,6 +4,7 @@ pub mod effects;
 pub mod fonts;
 pub mod graphics;
 pub mod model;
+mod output;
 pub mod palette;
 pub mod renderers;
 pub mod terminal;

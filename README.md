@@ -67,6 +67,16 @@ All 12 original renderer names are available: `bar`, `bigtext`, `circles`,
 The default, `shuffle`, changes renderer every ten active seconds and wipes into
 the next renderer over the last 2.5 seconds of each slot.
 
+Pixel effects use foreground/background halfblocks for finer vertical detail.
+Lava interpolates its height maps and warm palettes across broad lobes;
+colorwheel rotates continuously;
+pie and sweep have softer contours; circles add lighting and generation fades;
+sine includes a shaded trailing wave. Bar and dots show fractional segments.
+The three text renderers retain their fonts and stable sizing with richer shading
+and soft shadows. Shuffle feathers backgrounds while keeping one complete countdown.
+
+![Static RGB buffer previews of all twelve renderers](docs/visuals/renderer-preview.png)
+
 ```sh
 cargo run --release -- tools preview
 cargo run --release -- tools allfonts
@@ -104,10 +114,14 @@ Measure warmed frame preparation separately from terminal output:
 
 ```sh
 cargo test --release --test renderers measure_frame_preparation -- --ignored --nocapture
+cargo test --release --lib measure_lava_output -- --ignored --nocapture
+python3 -B tests/terminal_measure.py target/release/pace
 ```
 
-The frame measurement excludes the emulator, output flushing, and initial font
-or lava-map preparation. Visible smoothness depends on terminal size, emulator,
+The Rust measurements report render work, color adaptation and a comparison of
+encoded lava bytes. The PTY measurement reports observed completed-write
+cadence and output bytes, including a shuffle transition. Neither measures emulator
+painting. Visible smoothness depends on terminal size, emulator,
 and font settings. For a visual check, run `1m sine`, `1m lava`, and `2m shuffle`;
 pause, resume, and resize the window while they run.
 

@@ -2,6 +2,7 @@ use crate::{
     color::{OutputPolicy, adapt_buffer},
     graphics::centered_text,
     model::{Clock, FrameRate, FrameSchedule, TimerDetails},
+    output::OutputBackend,
     renderers::{Renderers, paused_overlay},
 };
 use crossterm::{
@@ -15,7 +16,6 @@ use crossterm::{
 };
 use ratatui::{
     Terminal,
-    backend::CrosstermBackend,
     buffer::Buffer,
     layout::Rect,
     style::{Color, Style},
@@ -30,7 +30,7 @@ use std::{
 };
 
 struct Session {
-    terminal: Terminal<CrosstermBackend<ColorWriter<Stdout>>>,
+    terminal: Terminal<OutputBackend<ColorWriter<Stdout>>>,
 }
 
 /// Crossterm encodes even named colors as indexed SGR. Basic terminals need ANSI SGR.
@@ -119,7 +119,8 @@ impl Session {
                 pending: Vec::new(),
             };
             execute!(out, EnterAlternateScreen, Hide)?;
-            Terminal::new(CrosstermBackend::new(out)).map(|terminal| Self { terminal })
+            Terminal::new(OutputBackend::new(out, policy == OutputPolicy::Ansi256))
+                .map(|terminal| Self { terminal })
         })();
         if result.is_err() {
             restore();
@@ -297,7 +298,8 @@ fn compose(
         let bg = if details.elapsed < 3.5 {
             234
         } else {
-            234 - (((details.elapsed - 3.5) / 3.5) * 3.0).clamp(0.0, 3.0) as u8
+            // The grayscale ramp ends at 232; 231 is white in the color cube.
+            234 - (((details.elapsed - 3.5) / 3.5) * 3.0).clamp(0.0, 2.0) as u8
         };
         for x in area.x..area.right() {
             buf[(x, y)]
@@ -420,6 +422,35 @@ mod tests {
         );
         let text: String = buf.content.iter().map(|c| c.symbol()).collect();
         assert!(text.contains("PAUSED") && text.contains("FPS paused"));
+    }
+
+    #[test]
+    fn shuffle_footer_stays_dark_after_the_first_transition() {
+        let area = Rect::new(0, 0, 120, 24);
+        let mut renderers = Renderers::new();
+        for elapsed in [0.0, 3.5, 6.9, 7.0, 10.0, 16.0, 20.0] {
+            for policy in [OutputPolicy::Truecolor, OutputPolicy::Ansi256] {
+                let mut buf = Buffer::empty(area);
+                compose(
+                    &mut renderers,
+                    "shuffle",
+                    TimerDetails {
+                        elapsed,
+                        duration: 60.0,
+                    },
+                    false,
+                    None,
+                    area,
+                    &mut buf,
+                );
+                adapt_buffer(&mut buf, policy);
+                let background = crate::color::color_rgb(buf[(0, area.bottom() - 1)].bg).unwrap();
+                assert!(
+                    background.0 <= 28 && background.1 <= 28 && background.2 <= 28,
+                    "shuffle footer turned bright at {elapsed}s with {policy:?}: {background:?}"
+                );
+            }
+        }
     }
 
     #[test]

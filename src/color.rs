@@ -242,7 +242,8 @@ pub fn adapt_buffer(buffer: &mut Buffer, policy: OutputPolicy) {
             } else if lower > upper + 0.15 {
                 "▄"
             } else {
-                ["░", "▒", "▓", "█"][(((upper + lower) * 0.5 * 4.0) as usize).min(3)]
+                // Leave full blocks for crisp text over the monochrome pixel field.
+                ["░", "▒", "▓"][(((upper + lower) * 0.5 * 3.0) as usize).min(2)]
             };
             cell.set_symbol(symbol);
         }

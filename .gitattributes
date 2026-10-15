@@ -1,0 +1,2 @@
+# Font bytes and reference output contain significant whitespace and line endings.
+assets/fonts/** -text -whitespace

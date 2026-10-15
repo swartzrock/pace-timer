@@ -1,0 +1,17 @@
+[package]
+name = "pace"
+version = "0.3.0"
+edition = "2024"
+description = "A visual terminal countdown timer, ported from pace-ts"
+license = "ISC"
+
+[dependencies]
+crossterm = "0.29"
+ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
+rand = "0.9"
+signal-hook = "0.3"
+
+[profile.release]
+lto = "thin"
+strip = true
+

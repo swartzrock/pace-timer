@@ -127,6 +127,25 @@ requirements. Deterministic shuffle coverage does not force every combination of
 text/geometric countdown classifications; native emulator appearance also remains
 a manual check. Final-head CI results are recorded on the renderer PR.
 
+### Lava correction after terminal feedback
+
+The initial refinement still repeated a multicolor palette fourteen times across
+the summed height field. This produced tightly packed rainbow bands even in RGB;
+256-color quantization made the boundaries harsher, while unrelated palette
+crossfades could become gray. Real-buffer captures reproduced the supplied image.
+Lava now uses a lower spatial frequency and three related black/red/orange/gold
+ramps, preserving elapsed-time motion, halfblock sampling and epoch continuity.
+Other renderers and the global palette catalog are unchanged.
+
+The regression fails before the fix at seed 0, six seconds: 320 of 4272 horizontal
+half-sample neighbors differ by more than 95 in a channel after 256-color adaptation.
+The corrected field stays below 1% across four seeds at 0, 6, 10, 19.9 and 20.1
+seconds. A one-step palette jump is allowed: indexed color still has visible steps.
+All 61 Rust tests, formatting, strict Clippy, release build and expanded PTY smoke
+pass. Focused review `20261015-144350-1d2be19e` found no defects. The all-renderer
+preview was refreshed; `visuals/lava-256-preview.png` shows the actual 256-color
+buffer at six seconds. Appearance and motion in the user's emulator remain manual.
+
 ## Historical port frame preparation
 
 Release mode; 120x40 buffer; 600 frames per renderer after warming. Includes

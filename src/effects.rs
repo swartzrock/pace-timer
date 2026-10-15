@@ -10,10 +10,15 @@ use crate::{
         put_color, text,
     },
     model::TimerDetails,
-    palette::DOUBLE_GRADIENTS,
 };
 
 const MAP_SIZE: usize = 800;
+// Related warm ramps stay saturated while crossfading, including after quantization.
+const LAVA_GRADIENTS: &[&[u8]] = &[
+    &[16, 52, 88, 124, 160, 196, 202, 208, 214, 220, 226, 230],
+    &[16, 52, 88, 124, 160, 196, 202, 208, 214, 215, 216, 223],
+    &[16, 52, 88, 94, 130, 166, 172, 208, 214, 220, 226, 230],
+];
 
 pub struct Effects {
     seed: u64,
@@ -132,7 +137,7 @@ impl Effects {
         if self.lava_gradient.map(|(cached, _, _)| cached) != Some(epoch) {
             let select = |epoch| {
                 let mut rng = self.epoch_rng(epoch, 1);
-                DOUBLE_GRADIENTS[rng.random_range(0..DOUBLE_GRADIENTS.len())].1
+                LAVA_GRADIENTS[rng.random_range(0..LAVA_GRADIENTS.len())]
             };
             self.lava_gradient = Some((epoch, select(epoch), select(epoch.wrapping_add(1))));
         }
@@ -158,7 +163,8 @@ impl Effects {
                     let y = f64::from(row) * 2.0 + half;
                     let height = bilinear(&maps.0, MAP_SIZE, x + x1, y + y1)
                         + bilinear(&maps.1, MAP_SIZE, x + x2, y + y2);
-                    let phase = (height * 14.0 + details.elapsed * 0.03).rem_euclid(2.0);
+                    // Broad lobes avoid sub-cell rainbow stripes in limited palettes.
+                    let phase = (height * 2.0 + details.elapsed * 0.03).rem_euclid(2.0);
                     let position = if phase <= 1.0 { phase } else { 2.0 - phase };
                     Some(mix(gradient(from, position), gradient(to, position), blend))
                 };
@@ -399,6 +405,53 @@ mod tests {
     use super::*;
 
     #[test]
+    fn lava_256_avoids_dense_high_contrast_stripes() {
+        use crate::color::{OutputPolicy, adapt_buffer, color_rgb};
+
+        let area = Rect::new(0, 0, 120, 40);
+        for seed in 0..4 {
+            let mut effects = Effects::new();
+            effects.seed = seed;
+            for elapsed in [0.0, 6.0, 10.0, 19.9, 20.1] {
+                let mut buf = Buffer::empty(area);
+                effects.draw(
+                    "lava",
+                    TimerDetails {
+                        elapsed,
+                        duration: 60.0,
+                    },
+                    area,
+                    &mut buf,
+                );
+                adapt_buffer(&mut buf, OutputPolicy::Ansi256);
+                let (mut abrupt, mut edges) = (0, 0);
+                for y in 0..area.height {
+                    for x in 0..area.width - 1 {
+                        let (a, b) = (&buf[(x, y)], &buf[(x + 1, y)]);
+                        if a.symbol() != "▀" || b.symbol() != "▀" {
+                            continue;
+                        }
+                        for (a, b) in [(a.fg, b.fg), (a.bg, b.bg)] {
+                            let (r, g, b1) = color_rgb(a).unwrap();
+                            let (r2, g2, b2) = color_rgb(b).unwrap();
+                            edges += 1;
+                            // One cube step is unavoidable; repeated jumps beyond it alias.
+                            if r.abs_diff(r2).max(g.abs_diff(g2)).max(b1.abs_diff(b2)) > 95 {
+                                abrupt += 1;
+                            }
+                        }
+                    }
+                }
+                assert!(edges > 1000);
+                assert!(
+                    abrupt * 100 < edges,
+                    "seed {seed}, {elapsed}s: {abrupt}/{edges} abrupt edges"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn bilinear_preserves_points_and_interpolates_interior_and_wrapped_edges() {
         let map = [0.0, 2.0, 4.0, 6.0];
         assert_eq!(bilinear(&map, 2, 0.0, 0.0), 0.0);
@@ -418,7 +471,7 @@ mod tests {
             u16::from(ar.abs_diff(br)) + u16::from(ag.abs_diff(bg)) + u16::from(ab.abs_diff(bb))
         };
         assert!(distance(hue(0.9999), hue(0.0001)) <= 2);
-        let stops = DOUBLE_GRADIENTS[0].1;
+        let stops = crate::palette::DOUBLE_GRADIENTS[0].1;
         let stop = 1.0 / (stops.len() - 1) as f64;
         assert!(
             distance(

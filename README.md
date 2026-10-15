@@ -68,7 +68,8 @@ The default, `shuffle`, changes renderer every ten active seconds and wipes into
 the next renderer over the last 2.5 seconds of each slot.
 
 Pixel effects use foreground/background halfblocks for finer vertical detail.
-Lava interpolates its height maps and palettes; colorwheel rotates continuously;
+Lava interpolates its height maps and warm palettes across broad lobes;
+colorwheel rotates continuously;
 pie and sweep have softer contours; circles add lighting and generation fades;
 sine includes a shaded trailing wave. Bar and dots show fractional segments.
 The three text renderers retain their fonts and stable sizing with richer shading

@@ -25,7 +25,7 @@ This is a local build-environment limitation, not a Cargo configuration change.
 
 ## Adaptive color and FPS foundation — 2026-10-15
 
-The first visual-improvement phase passes 44 Rust tests, formatting, strict
+The first visual-improvement phase passes 46 Rust tests, formatting, strict
 Clippy, release build and the expanded Unix PTY smoke test. Builds used
 `--target-dir /tmp/pace-rs-target` for the local sandbox limitation above.
 The original 306 FIGlet outputs still pass without font/parser/asset changes.
@@ -46,6 +46,15 @@ The Rust workflow runs test and release PTY checks on Linux and macOS and
 formatting/Clippy on Linux. It accepts every pull-request base, including the
 second branch of the visual-improvement stack. CI results belong to each PR's
 current head; local verification does not substitute for those checks.
+
+Review `20261015-133248-c5542576` confirmed three output-boundary defects;
+all were reproduced and fixed before publication. Monochrome now distinguishes
+empty dots and pie sectors. The timer configures Crossterm from the resolved
+policy so explicit depth overrides `NO_COLOR`. A basic ANSI writer translates
+Crossterm's indexed encoding of named colors into ordinary 16-color SGR.
+PTY assertions now check actual timer bytes for all three forced color depths
+with `NO_COLOR`, and verify that `--no-color` still wins. The writer regression
+covers combined foreground/background, fragmented writes and cursor/sync controls.
 
 ## Frame preparation
 

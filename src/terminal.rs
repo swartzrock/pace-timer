@@ -21,7 +21,7 @@ use ratatui::{
     style::{Color, Style},
 };
 use std::{
-    io::{self, IsTerminal, Stdout},
+    io::{self, IsTerminal, Stdout, Write},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -30,14 +30,94 @@ use std::{
 };
 
 struct Session {
-    terminal: Terminal<CrosstermBackend<Stdout>>,
+    terminal: Terminal<CrosstermBackend<ColorWriter<Stdout>>>,
+}
+
+/// Crossterm encodes even named colors as indexed SGR. Basic terminals need ANSI SGR.
+struct ColorWriter<W> {
+    inner: W,
+    basic: bool,
+    pending: Vec<u8>,
+}
+
+impl<W: Write> Write for ColorWriter<W> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if !self.basic {
+            return self.inner.write(bytes);
+        }
+        self.pending.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if self.basic {
+            self.inner.write_all(&basic_ansi(&self.pending))?;
+            self.pending.clear();
+        }
+        self.inner.flush()
+    }
+}
+
+fn basic_ansi(input: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(input.len());
+    let mut i = 0;
+    while i < input.len() {
+        if input[i..].starts_with(b"\x1b[") {
+            let mut end = i + 2;
+            while end < input.len() && (input[end].is_ascii_digit() || input[end] == b';') {
+                end += 1;
+            }
+            if input.get(end) == Some(&b'm') {
+                let parameters: Vec<_> = std::str::from_utf8(&input[i + 2..end])
+                    .unwrap()
+                    .split(';')
+                    .collect();
+                output.extend_from_slice(b"\x1b[");
+                let mut p = 0;
+                while p < parameters.len() {
+                    if p > 0 {
+                        output.push(b';');
+                    }
+                    let index = parameters
+                        .get(p + 2)
+                        .and_then(|index| index.parse::<u8>().ok())
+                        .filter(|index| *index < 16);
+                    if matches!(parameters[p], "38" | "48")
+                        && parameters.get(p + 1) == Some(&"5")
+                        && let Some(index) = index
+                    {
+                        write!(
+                            output,
+                            "{}",
+                            crate::color::ansi_code(index, parameters[p] == "48")
+                        )
+                        .unwrap();
+                        p += 3;
+                    } else {
+                        output.extend_from_slice(parameters[p].as_bytes());
+                        p += 1;
+                    }
+                }
+                output.push(b'm');
+                i = end + 1;
+                continue;
+            }
+        }
+        output.push(input[i]);
+        i += 1;
+    }
+    output
 }
 
 impl Session {
-    fn enter() -> io::Result<Self> {
+    fn enter(policy: OutputPolicy) -> io::Result<Self> {
         terminal::enable_raw_mode()?;
         let result = (|| {
-            let mut out = io::stdout();
+            let mut out = ColorWriter {
+                inner: io::stdout(),
+                basic: policy == OutputPolicy::Ansi16,
+                pending: Vec::new(),
+            };
             execute!(out, EnterAlternateScreen, Hide)?;
             Terminal::new(CrosstermBackend::new(out)).map(|terminal| Self { terminal })
         })();
@@ -70,6 +150,8 @@ pub fn run(duration: Duration, name: &str, policy: OutputPolicy, show_fps: bool)
             "The timer needs an interactive terminal on stdin and stdout",
         ));
     }
+    // The captured policy already resolves NO_COLOR and explicit overrides.
+    crossterm::style::force_color_output(policy != OutputPolicy::Monochrome);
     let interrupted = Arc::new(AtomicBool::new(false));
     #[cfg(unix)]
     let signals = {
@@ -106,7 +188,7 @@ fn run_loop(
     show_fps: bool,
     interrupted: &AtomicBool,
 ) -> io::Result<()> {
-    let mut session = Session::enter()?;
+    let mut session = Session::enter(policy)?;
     let mut renderers = Renderers::new();
     let started = Instant::now();
     let mut clock = Clock::new(duration, started);
@@ -251,6 +333,35 @@ fn compose(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn basic_ansi_preserves_controls_and_handles_fragmented_combined_colors() {
+        let mut writer = ColorWriter {
+            inner: Vec::new(),
+            basic: true,
+            pending: Vec::new(),
+        };
+        writer.write_all(b"\x1b[?2026h\x1b[2;3H\x1b[38;").unwrap();
+        writer
+            .write_all("5;9;48;5;4m▀\x1b[39;49m\x1b[?2026l".as_bytes())
+            .unwrap();
+        writer.flush().unwrap();
+        assert_eq!(
+            writer.inner,
+            "\x1b[?2026h\x1b[2;3H\x1b[91;44m▀\x1b[39;49m\x1b[?2026l".as_bytes()
+        );
+        assert!(writer.pending.is_empty());
+        for (index, foreground) in [
+            30, 31, 32, 33, 34, 35, 36, 37, 90, 91, 92, 93, 94, 95, 96, 97,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let source = format!("\x1b[38;5;{index};48;5;{index}m");
+            let expected = format!("\x1b[{foreground};{}m", foreground + 10);
+            assert_eq!(basic_ansi(source.as_bytes()), expected.as_bytes());
+        }
+    }
 
     #[test]
     fn fps_footer_is_right_aligned_and_keeps_countdown_in_content() {

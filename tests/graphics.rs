@@ -75,3 +75,39 @@ fn monochrome_pixels_keep_structure_and_text_keeps_crisp_masks() {
             .all(|c| c.fg == Color::Reset && c.bg == Color::Reset)
     );
 }
+
+#[test]
+fn monochrome_effects_retain_progress_outside_the_countdown() {
+    use pace::{effects::Effects, model::TimerDetails};
+    let area = Rect::new(0, 0, 80, 40);
+    for name in ["dots", "pie"] {
+        let mut effects = Effects::new();
+        let mut states = Vec::new();
+        for elapsed in [0.0, 30.0] {
+            let mut buf = Buffer::empty(area);
+            effects.draw(
+                name,
+                TimerDetails {
+                    elapsed,
+                    duration: 60.0,
+                },
+                area,
+                &mut buf,
+            );
+            adapt_buffer(&mut buf, OutputPolicy::Monochrome);
+            states.push(buf);
+        }
+        let filled = if name == "dots" { "●" } else { "█" };
+        let count = |buffer: &Buffer| {
+            buffer
+                .content
+                .iter()
+                .filter(|cell| cell.symbol() == filled)
+                .count()
+        };
+        assert!(
+            count(&states[0]) < count(&states[1]),
+            "{name} lost progress in monochrome"
+        );
+    }
+}

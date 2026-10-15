@@ -194,32 +194,11 @@ fn write_color(out: &mut impl Write, color: Color, background: bool) -> io::Resu
         Color::Indexed(index) => write!(out, "\x1b[{channel};5;{index}m"),
         Color::Reset => write!(out, "\x1b[{}m", if background { 49 } else { 39 }),
         named => {
-            let index = [
-                Color::Black,
-                Color::Red,
-                Color::Green,
-                Color::Yellow,
-                Color::Blue,
-                Color::Magenta,
-                Color::Cyan,
-                Color::Gray,
-                Color::DarkGray,
-                Color::LightRed,
-                Color::LightGreen,
-                Color::LightYellow,
-                Color::LightBlue,
-                Color::LightMagenta,
-                Color::LightCyan,
-                Color::White,
-            ]
-            .iter()
-            .position(|color| *color == named)
-            .unwrap();
-            let code = if index < 8 {
-                30 + index
-            } else {
-                90 + index - 8
-            } + if background { 10 } else { 0 };
+            let index = crate::color::ANSI_COLORS
+                .iter()
+                .position(|color| *color == named)
+                .unwrap();
+            let code = crate::color::ansi_code(index as u8, background);
             write!(out, "\x1b[{code}m")
         }
     }

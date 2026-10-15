@@ -15,7 +15,7 @@ import time
 
 
 class Timer:
-    def __init__(self, executable, *args):
+    def __init__(self, executable, *args, environment=None):
         self.master, self.slave = pty.openpty()
         self.resize(100, 35)
         self.original = termios.tcgetattr(self.slave)
@@ -24,7 +24,7 @@ class Timer:
         self.process = subprocess.Popen(
             [executable, *args], stdin=self.slave, stdout=self.slave,
             stderr=self.slave, start_new_session=True,
-            env={**os.environ, "TERM": "xterm-256color"},
+            env={**os.environ, "TERM": "xterm-256color", **(environment or {})},
         )
 
     def resize(self, width, height):
@@ -119,6 +119,23 @@ def main():
     timer = Timer(executable, "0.12s", "pie")
     timer.finish()
     assert b"FPS" not in timer.output, "FPS should default off"
+
+    for depth in ["truecolor", "256", "16"]:
+        timer = Timer(executable, "0.12s", "pie", "--color-depth", depth,
+                      environment={"NO_COLOR": "1"})
+        timer.finish()
+        if depth == "truecolor":
+            assert b"38;2;" in timer.output, "NO_COLOR suppressed explicit RGB"
+        elif depth == "256":
+            assert b"38;5;" in timer.output, "NO_COLOR suppressed explicit indexed color"
+        else:
+            assert not re.search(rb"(?:38|48);[25];", timer.output), "16-color output used extended SGR"
+            assert re.search(rb"\x1b\[(?:[0-9]+;)*(?:3[0-7]|9[0-7])(?:;[0-9]+)*m", timer.output), "basic ANSI color absent"
+    timer = Timer(executable, "0.12s", "pie", "--color-depth", "truecolor", "--no-color",
+                  environment={"NO_COLOR": "1"})
+    timer.finish()
+    assert not re.search(rb"(?:38|48);[25];", timer.output), "--no-color lost precedence"
+    print("PASS: actual timer color depth and NO_COLOR override precedence")
 
 
 if __name__ == "__main__":

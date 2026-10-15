@@ -87,6 +87,9 @@ impl OutputPolicy {
     }
 
     pub fn adapt(self, color: Color) -> Color {
+        if self == Self::Monochrome {
+            return Color::Reset;
+        }
         let Some(rgb) = color_rgb(color) else {
             return Color::Reset;
         };
@@ -117,7 +120,7 @@ const ANSI_RGB: [(u8, u8, u8); 16] = [
     (0, 255, 255),
     (255, 255, 255),
 ];
-const ANSI_COLORS: [Color; 16] = [
+pub(crate) const ANSI_COLORS: [Color; 16] = [
     Color::Black,
     Color::Red,
     Color::Green,
@@ -135,6 +138,14 @@ const ANSI_COLORS: [Color; 16] = [
     Color::LightCyan,
     Color::White,
 ];
+
+pub(crate) fn ansi_code(index: u8, background: bool) -> u8 {
+    (if index < 8 {
+        30 + index
+    } else {
+        90 + index - 8
+    }) + if background { 10 } else { 0 }
+}
 const LEVELS: [u8; 6] = [0, 95, 135, 175, 215, 255];
 
 pub fn indexed_rgb(index: u8) -> Color {
@@ -205,6 +216,14 @@ fn nearest_index(rgb: (u8, u8, u8)) -> u8 {
 /// Adapt final colors, retaining text and shape symbols.
 pub fn adapt_buffer(buffer: &mut Buffer, policy: OutputPolicy) {
     for cell in &mut buffer.content {
+        if policy == OutputPolicy::Monochrome {
+            // Legacy solid-cell effects encode empty regions with these dark stops.
+            if cell.symbol() == "●" && color_rgb(cell.fg) == color_rgb(indexed_rgb(232)) {
+                cell.set_symbol("○");
+            } else if cell.symbol() == "█" && color_rgb(cell.fg) == color_rgb(indexed_rgb(233)) {
+                cell.set_symbol("░");
+            }
+        }
         if policy == OutputPolicy::Monochrome && matches!(cell.symbol(), "▀" | "▄") {
             let light = |color| {
                 color_rgb(color).map_or(0.0, |(r, g, b)| {

@@ -77,12 +77,16 @@ and soft shadows. Shuffle feathers backgrounds while keeping one complete countd
 
 ![Static RGB buffer previews of all twelve renderers](docs/visuals/renderer-preview.png)
 
-New renderer: `aurora` (Aurora Veil) draws mint and violet light curtains that
-retreat from right to left as time runs out. It is included in preview and
-shuffle, and uses indexed-color terminal cells without a GPU or extra runtime.
+New renderers use indexed-color terminal cells without a GPU or extra runtime,
+and are included in preview and shuffle:
+
+- `aurora` (Aurora Veil): mint and violet light curtains retreat from right to left.
+- `tide` (Tidal Reservoir): a blue reservoir drains with a rippling waterline and
+  moving underwater caustics.
 
 ```sh
 cargo run --release -- 5m aurora
+cargo run --release -- 5m tide
 ```
 
 ```sh

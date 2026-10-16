@@ -63,6 +63,7 @@ impl Effects {
             "sine" => sine(details, area, buf),
             "lava" => self.lava(details, area, buf),
             "aurora" => aurora(details, area, buf),
+            "tide" => tide(details, area, buf),
             _ => {}
         }
     }
@@ -387,6 +388,40 @@ fn aurora(details: TimerDetails, area: Rect, buf: &mut Buffer) {
             light * (0.3 - mint * 0.14),
             light * (0.17 + mint * 0.77),
             light * (0.7 - mint * 0.11),
+        ]
+    });
+}
+
+fn tide(details: TimerDetails, area: Rect, buf: &mut Buffer) {
+    let remaining = 1.0 - details.progress();
+    let time = details.elapsed;
+    sampled_field(area, buf, |u, v, aspect| {
+        if remaining == 0.0 {
+            return [0.0; 3];
+        }
+        let x = (u - 0.5) * aspect * 2.0;
+        let wave = ((x * 5.0 + time * 0.7).sin() + (x * 8.0 - time * 0.5).sin())
+            * 0.012
+            * (PI * remaining).sin();
+        let level = remaining + wave;
+        if v >= level {
+            return [0.0; 3];
+        }
+        let depth = level - v;
+        let surface = (-depth * 4.0).exp();
+        let caustic = (0.5
+            + 0.5 * (x * 24.0 + (v * 21.0 + time * 0.35).sin() * 2.0 + time * 0.3).sin())
+        .powi(15)
+            * (0.5 + 0.5 * (v * 23.0 - time * 0.4).cos()).powi(3);
+        let edge = if depth < 0.008 && remaining < 1.0 {
+            0.4
+        } else {
+            0.0
+        };
+        [
+            0.018 + caustic * 0.03 + edge * 0.35,
+            0.144 + surface * 0.24 + caustic * 0.16 + edge * 0.87,
+            0.216 + surface * 0.33 + caustic * 0.18 + edge,
         ]
     });
 }

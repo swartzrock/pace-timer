@@ -62,7 +62,7 @@ class Timer:
 
 def main():
     executable = str(pathlib.Path(sys.argv[1]).resolve())
-    renderers = ["aurora", "bar", "bigtext", "circles", "colorwheel", "colossal", "dots", "lava", "pie", "shuffle", "sine", "slant", "sweep"]
+    renderers = ["aurora", "bar", "bigtext", "circles", "colorwheel", "colossal", "dots", "lava", "pie", "shuffle", "sine", "slant", "sweep", "tide"]
     for renderer in renderers:
         timer = Timer(executable, "0.12s", renderer)
         elapsed = timer.finish()

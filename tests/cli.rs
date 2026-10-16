@@ -245,22 +245,26 @@ fn every_tool_honors_pipe_explicit_depth_and_no_color() {
 }
 
 #[test]
-fn aurora_is_registered_for_selection_preview_and_shuffle() {
+fn shader_fields_are_registered_for_selection_preview_and_shuffle() {
     use pace::{
         cli::{self, Command as CliCommand},
         renderers::PREVIEW_RENDERERS,
     };
-    assert!(PREVIEW_RENDERERS.contains(&"aurora"));
-    for values in [
-        vec!["5m", "aurora"],
-        vec!["timer", "5m", "aurora"],
-        vec!["5m:aurora"],
-    ] {
-        let args = values.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        assert!(
-            matches!(cli::parse(&args).map(|parsed| parsed.command), Ok(CliCommand::Timer { renderer, .. }) if renderer == "aurora")
-        );
-    }
     let output = pace(&["tools", "preview"]);
-    assert!(String::from_utf8(output.stdout).unwrap().contains("Aurora"));
+    assert!(output.status.success());
+    let preview = String::from_utf8(output.stdout).unwrap();
+    for name in ["aurora", "tide"] {
+        assert!(PREVIEW_RENDERERS.contains(&name));
+        for args in [
+            vec!["5m".into(), name.into()],
+            vec!["timer".into(), "5m".into(), name.into()],
+            vec![format!("5m:{name}")],
+        ] {
+            assert!(
+                matches!(cli::parse(&args).map(|parsed| parsed.command), Ok(CliCommand::Timer { renderer, .. }) if renderer == name)
+            );
+        }
+        let title = format!("{}{}", name[..1].to_uppercase(), &name[1..]);
+        assert!(preview.contains(&title), "{name}");
+    }
 }

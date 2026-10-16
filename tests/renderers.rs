@@ -328,20 +328,22 @@ fn shuffle_feathers_colors_with_valid_symbols_and_exact_endpoints() {
 }
 
 #[test]
-fn aurora_keeps_a_readable_clock_in_small_viewports() {
-    for height in [1, 4] {
-        let area = Rect::new(0, 0, 12, height);
-        let mut buf = Buffer::empty(area);
-        Renderers::new().render(
-            "aurora",
-            TimerDetails {
-                elapsed: 10.0,
-                duration: 25.0,
-            },
-            area,
-            &mut buf,
-        );
-        let text: String = buf.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(text.contains("0:15"), "{height} rows: {text}");
+fn shader_fields_keep_a_readable_clock_in_small_viewports() {
+    for name in ["aurora", "tide"] {
+        for height in [1, 4] {
+            let area = Rect::new(0, 0, 12, height);
+            let mut buf = Buffer::empty(area);
+            Renderers::new().render(
+                name,
+                TimerDetails {
+                    elapsed: 10.0,
+                    duration: 25.0,
+                },
+                area,
+                &mut buf,
+            );
+            let text: String = buf.content.iter().map(|cell| cell.symbol()).collect();
+            assert!(text.contains("0:15"), "{name}, {height} rows: {text}");
+        }
     }
 }

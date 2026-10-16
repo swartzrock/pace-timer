@@ -14,6 +14,7 @@ pub const RENDERER_NAMES: &[&str] = &[
     "sine",
     "slant",
     "sweep",
+    "tide",
 ];
 
 pub const FRAME_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / 60);

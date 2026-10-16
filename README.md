@@ -82,8 +82,8 @@ vertical samples per character, without a GPU or extra runtime. They work best
 in a 24-bit-color terminal and are included in preview and shuffle:
 
 - `aurora` (Aurora Veil): mint and violet light curtains retreat from right to left.
-- `tide` (Tidal Reservoir): a blue reservoir drains with a rippling waterline and
-  moving underwater caustics.
+- `tide`: an ocean recedes with broad horizontal swells and a little foam along
+  the waterline.
 - `interference` (Interference Field): blue and pink ripples from two sources
   settle from right to left as time runs out.
 

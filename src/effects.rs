@@ -410,7 +410,7 @@ fn tide(details: TimerDetails, area: Rect, buf: &mut Buffer) {
             return [0.0; 3];
         }
         let x = (u - 0.5) * aspect * 2.0;
-        let wave = ((x * 5.0 + time * 0.7).sin() + (x * 8.0 - time * 0.5).sin())
+        let wave = ((x * 2.0 + time * 0.7).sin() + (x * 3.5 - time * 0.5).sin())
             * 0.012
             * (PI * remaining).sin();
         let level = remaining + wave;
@@ -419,20 +419,15 @@ fn tide(details: TimerDetails, area: Rect, buf: &mut Buffer) {
         }
         let depth = level - v;
         let surface = (-depth * 3.0).exp();
-        let warp = (x * 2.5 + v * 4.0 + time * 0.15).sin() * 0.7
-            + (x * 4.0 - v * 3.0 - time * 0.1).cos() * 0.3;
-        let network = (x * 14.0 + v * 10.0 + warp * 3.0 + time * 0.3).sin()
-            * (x * 6.0 - v * 12.0 + warp * 2.0 - time * 0.15).sin();
-        let caustic = (1.0 - network.abs()).powi(12) * (-depth * 1.4).exp();
-        let edge = if remaining < 1.0 {
-            (-depth * 140.0).exp() * 0.35
-        } else {
-            0.0
-        };
+        // Shallow bends keep the swell horizontal, like long ocean wave fronts.
+        let bend = (x * 0.9 + time * 0.12).sin() * 0.35;
+        let swell = (0.5 + 0.5 * (v * TAU * 5.0 - time * 0.8 + bend).sin()).powi(3);
+        let crest = (0.5 + 0.5 * (x * 7.0 - time * 0.45).sin()).powi(3);
+        let foam = (-depth * 100.0).exp() * crest;
         [
-            0.006 + caustic * 0.08 + edge * 0.45,
-            0.035 + surface * 0.28 + caustic * 0.27 + edge * 0.8,
-            0.14 + surface * 0.3 + caustic * 0.34 + edge,
+            0.004 + swell * 0.012 + foam * 0.75,
+            0.035 + surface * 0.12 + swell * 0.1 + foam * 0.8,
+            0.12 + surface * 0.16 + swell * 0.16 + foam * 0.8,
         ]
     });
 }

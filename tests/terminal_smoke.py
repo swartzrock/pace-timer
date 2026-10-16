@@ -69,7 +69,7 @@ def main():
         assert elapsed < 1.5, (renderer, elapsed)
     print(f"PASS: all {len(renderers)} renderers complete and restore terminal modes")
 
-    timer = Timer(executable, "timer", "0.8s", "sine")
+    timer = Timer(executable, "0.8s", "sine")
     timer.drain(0.2)
     os.write(timer.master, b" ")
     timer.drain(0.45)
@@ -79,7 +79,7 @@ def main():
     assert 1.15 < elapsed < 2.2, elapsed
     print("PASS: space pauses/resumes countdown and animation")
 
-    timer = Timer(executable, "10s:shuffle")
+    timer = Timer(executable, "10s", "shuffle")
     timer.drain(0.15)
     timer.resize(1, 1)
     timer.drain(0.12)

@@ -112,16 +112,11 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
             other => Err(format!("Unknown tool '{other}'")),
         };
     }
-    let args = if args[0] == "timer" { &args[1..] } else { args };
-    if args.is_empty() || args.len() > 2 {
-        return Err("Expected: pace [timer] DURATION [RENDERER]".into());
+    if args.len() > 2 {
+        return Err("Expected: pace DURATION [RENDERER] [OPTIONS]".into());
     }
-    let (duration, combined_renderer) = args[0]
-        .split_once(':')
-        .map_or((args[0].as_str(), None), |(d, r)| (d, Some(r)));
-    let renderer = combined_renderer
-        .or_else(|| args.get(1).map(String::as_str))
-        .unwrap_or("shuffle");
+    let duration = parse_duration(&args[0])?;
+    let renderer = args.get(1).map(String::as_str).unwrap_or("shuffle");
     if !RENDERER_NAMES.contains(&renderer) {
         return Err(format!(
             "Unknown renderer '{renderer}'. Choose: {}",
@@ -129,7 +124,7 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
         ));
     }
     Ok(Command::Timer {
-        duration: parse_duration(duration)?,
+        duration,
         renderer: renderer.into(),
     })
 }
@@ -204,9 +199,7 @@ pub fn help() -> String {
         "Pace — visual countdown timer
 
 USAGE
-  pace [timer] DURATION [RENDERER]
-  pace DURATION:RENDERER
-  pace tools [TOOL]
+  pace DURATION [RENDERER] [OPTIONS]
 
 DURATION
   Minutes and seconds: 5m, 3m10s, 30s, 2.5m
@@ -215,32 +208,23 @@ RENDERERS
   {}
   Default: shuffle (switches every 10 seconds)
 
-TOOLS
-{TOOL_DESCRIPTIONS}
-  Run 'pace tools' or 'pace help tools' for tool usage and examples.
-
 OPTIONS
   --help, -h                          Show help
   --version                           Print the Pace version
   --color-depth auto|truecolor|256|16  Output color depth (default: auto)
   --no-color                          Disable color, including explicit depth
-  --show-fps                          Show delivered frame rate (timers only)
+  --show-fps                          Show frame rate in the footer
   Flags may precede or follow operands; each flag may appear once.
-  Auto honors nonempty NO_COLOR; explicit depth overrides it and enables color in pipes.
-  Auto uses TERM/COLORTERM hints; SSH/tmux context alone does not prove RGB support.
 
 CONTROLS
   Space: pause/resume    Ctrl-C: exit
 
 EXAMPLES
+  pace 5m
   pace 5m pie
-  pace timer 2.5m lava
-  pace 3m10s:shuffle
-  pace tools preview
-  pace tools allfonts
-  pace tools colorblocks
-  pace tools version
-  pace 1m lava --show-fps --color-depth truecolor
+  pace 2.5m lava
+  pace 3m10s shuffle
+  pace 1m interference --show-fps
 ",
         RENDERER_NAMES.join(", ")
     )
@@ -254,20 +238,14 @@ mod tests {
     }
 
     #[test]
-    fn accepts_original_command_forms() {
-        for values in [
-            vec!["3m10s", "pie"],
-            vec!["timer", "3m10s", "pie"],
-            vec!["3m10s:pie"],
-        ] {
-            assert_eq!(
-                parse(&args(&values)).unwrap().command,
-                Command::Timer {
-                    duration: Duration::from_secs(190),
-                    renderer: "pie".into()
-                }
-            );
-        }
+    fn accepts_duration_and_optional_renderer() {
+        assert_eq!(
+            parse(&args(&["3m10s", "pie"])).unwrap().command,
+            Command::Timer {
+                duration: Duration::from_secs(190),
+                renderer: "pie".into()
+            }
+        );
         assert_eq!(
             parse(&args(&["2.5m"])).unwrap().command,
             Command::Timer {

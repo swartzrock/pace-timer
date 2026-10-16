@@ -10,7 +10,7 @@ frames do not speed up effects or lengthen the timer. Missed frames are skipped.
 
 ## Run
 
-The interface is `pace DURATION [RENDERER] [OPTIONS]`. The renderer defaults to
+Start a timer with `pace DURATION [RENDERER] [OPTIONS]`. The renderer defaults to
 `shuffle`; durations use minutes and seconds, such as `5m`, `3m10s`, or `2.5m`.
 
 With Rust and Cargo installed, run these commands from this folder:
@@ -28,6 +28,13 @@ To build a standalone executable:
 cargo build --release
 ./target/release/pace 5m shuffle
 ./target/release/pace --help
+```
+
+Run `pace preview [OPTIONS]` to print static samples of the renderers (excluding
+shuffle) and exit. To preview with a specific color depth:
+
+```sh
+./target/release/pace preview --color-depth 256
 ```
 
 On Windows the executable is `target\release\pace.exe`. The countdown requires

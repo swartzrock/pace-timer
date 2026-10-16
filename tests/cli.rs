@@ -8,19 +8,20 @@ fn pace(args: &[&str]) -> std::process::Output {
 }
 
 #[test]
-fn help_describes_only_the_simple_timer_interface() {
+fn help_describes_timers_and_public_preview() {
     for args in [vec![], vec!["--help"], vec!["-h"], vec!["help"]] {
         let output = pace(&args);
         assert!(output.status.success());
         let text = String::from_utf8(output.stdout).unwrap();
         assert!(text.contains("pace DURATION [RENDERER] [OPTIONS]"));
+        assert!(text.contains("pace preview [OPTIONS]"));
+        assert!(text.contains("Print renderer previews and exit"));
         for name in pace::model::RENDERER_NAMES {
             assert!(text.contains(name), "{name}");
         }
         for private_or_legacy in [
             "TOOLS",
             "pace tools",
-            "preview",
             "allfonts",
             "colorblocks",
             "[timer]",
@@ -35,6 +36,22 @@ fn help_describes_only_the_simple_timer_interface() {
         }
         for option in ["--show-fps", "--color-depth auto|truecolor|256|16|1"] {
             assert!(text.contains(option));
+        }
+    }
+}
+
+#[test]
+fn public_preview_matches_personal_alias_with_each_color_depth() {
+    use pace::cli;
+    for depth in ["auto", "truecolor", "256", "16", "1"] {
+        let alias = ["tools", "preview", "--color-depth", depth].map(String::from);
+        let expected = cli::parse(&alias).unwrap();
+        for args in [
+            vec!["preview", "--color-depth", depth],
+            vec!["--color-depth", depth, "preview"],
+        ] {
+            let args = args.into_iter().map(String::from).collect::<Vec<_>>();
+            assert_eq!(cli::parse(&args).unwrap(), expected, "{args:?}");
         }
     }
 }
@@ -62,7 +79,7 @@ fn help_explains_the_original_typescript_tools() {
 
 #[test]
 fn preview_keeps_the_original_tools_panel_frames() {
-    let output = pace(&["tools", "preview", "--color-depth", "1"]);
+    let output = pace(&["preview", "--color-depth", "1"]);
     assert!(output.status.success());
     let text = String::from_utf8(output.stdout).unwrap();
     let panels = pace::renderers::PREVIEW_RENDERERS.len();
@@ -92,6 +109,8 @@ fn invalid_input_exits_with_a_useful_error_before_terminal_setup() {
         &["1s", "--no-color"],
         &["tools", "wat"],
         &["tools", "version", "extra"],
+        &["preview", "extra"],
+        &["preview", "--show-fps"],
     ] {
         let output = pace(args);
         assert!(!output.status.success(), "{args:?}");
@@ -116,7 +135,7 @@ fn timer_refuses_piped_output_without_changing_terminal_modes() {
 
 #[test]
 fn preview_contains_all_eleven_non_shuffle_renderers() {
-    let output = pace(&["tools", "preview"]);
+    let output = pace(&["preview"]);
     assert!(
         output.status.success(),
         "{}",
@@ -179,6 +198,7 @@ fn space_separated_timers_and_personal_tools_parse() {
         (vec!["help"], ParsedCommand::Help),
         (vec!["garbage", "--help"], ParsedCommand::Help),
         (vec!["--version"], ParsedCommand::Version),
+        (vec!["preview"], ParsedCommand::Preview),
         (vec!["tools", "preview"], ParsedCommand::Preview),
         (vec!["tools", "allfonts"], ParsedCommand::AllFonts),
         (vec!["tools", "colorblocks"], ParsedCommand::ColorBlocks),
@@ -233,7 +253,13 @@ fn output_flags_parse_anywhere_and_preserve_timer_operands() {
 
 #[test]
 fn every_tool_honors_pipe_and_explicit_color_modes() {
-    for tool in ["preview", "allfonts", "colorblocks"] {
+    for command in [
+        &["preview"][..],
+        &["tools", "preview"],
+        &["tools", "allfonts"],
+        &["tools", "colorblocks"],
+    ] {
+        let tool = command.join(" ");
         for (flags, expected) in [
             (vec![], "mono"),
             (vec!["--color-depth=auto"], "mono"),
@@ -244,7 +270,7 @@ fn every_tool_honors_pipe_and_explicit_color_modes() {
             (vec!["--color-depth", "1"], "mono"),
         ] {
             let output = Command::new(env!("CARGO_BIN_EXE_pace"))
-                .args(["tools", tool])
+                .args(command)
                 .args(flags)
                 .env("TERM", "xterm-256color")
                 .env("COLORTERM", "truecolor")

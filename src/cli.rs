@@ -93,6 +93,9 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
     if args == ["--version"] {
         return Ok(Command::Version);
     }
+    if args == ["preview"] {
+        return Ok(Command::Preview);
+    }
     if args[0] == "tools" {
         if args.len() == 1 {
             return Ok(Command::ToolsHelp);
@@ -195,6 +198,7 @@ pub fn help() -> String {
 
 USAGE
   pace DURATION [RENDERER] [OPTIONS]
+  pace preview [OPTIONS]
 
 DURATION
   The timer ends after this duration. Use minutes (m) and/or seconds (s).
@@ -209,6 +213,7 @@ OPTIONS
   --color-depth auto|truecolor|256|16|1  Colors (default: auto; 1: monochrome)
 
 INFORMATION
+  preview     Print renderer previews and exit
   --help, -h  Print help and exit
   --version   Print the Pace version and exit
 
@@ -217,6 +222,7 @@ CONTROLS
 
 EXAMPLES
   pace 5m
+  pace preview
   pace 5m pie
   pace 2.5m lava
   pace 3m10s shuffle

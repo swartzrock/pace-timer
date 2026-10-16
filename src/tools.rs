@@ -30,14 +30,16 @@ fn preview_at_size(
     // Leave the final terminal column unused so a printed row cannot auto-wrap.
     let width = width.saturating_sub(1).max(1);
     let cell_width = (width - (columns - 1)) / columns;
-    let cell_height = (height.saturating_sub(4) / 2).clamp(12, 16);
+    let cell_height = (height.saturating_sub(4) / 2).clamp(12, 16) * 3 / 2;
     let mut heading = Buffer::empty(Rect::new(0, 0, width, 3));
     let area = heading.area;
     text(&mut heading, area, 0, 0, "Pace renderers", 252);
     text(&mut heading, area, 0, 1, "Try one: pace 5m tide", 244);
     write_buffer(out, &heading, policy)?;
     let mut renderers = Renderers::new();
-    for row in PREVIEW_RENDERERS.chunks(usize::from(columns)) {
+    let mut names = PREVIEW_RENDERERS.to_vec();
+    names.sort_unstable();
+    for row in names.chunks(usize::from(columns)) {
         let bounds = Rect::new(0, 0, width, cell_height);
         let mut buf = Buffer::empty(bounds);
         for (i, name) in row.iter().enumerate() {
@@ -303,6 +305,13 @@ mod tests {
                 .filter(|(_, line)| line.contains('┌'))
                 .collect();
             assert_eq!(tops.len(), PREVIEW_RENDERERS.len().div_ceil(columns));
+            let names: Vec<_> = tops
+                .iter()
+                .flat_map(|(_, line)| line.split_whitespace())
+                .filter(|word| word.chars().all(|ch| ch.is_ascii_lowercase()))
+                .collect();
+            assert_eq!(names.len(), PREVIEW_RENDERERS.len());
+            assert!(names.windows(2).all(|pair| pair[0] < pair[1]));
             for (index, (top, line)) in tops.iter().enumerate() {
                 let count = columns.min(PREVIEW_RENDERERS.len() - index * columns);
                 assert_eq!(line.matches('┌').count(), count);
@@ -311,7 +320,7 @@ mod tests {
                     .iter()
                     .position(|line| line.contains('└'))
                     .unwrap();
-                assert!((12..=16).contains(&(bottom + 2)));
+                assert!((18..=24).contains(&(bottom + 2)));
                 let bottom_line = lines[*top + bottom + 1];
                 assert_eq!(bottom_line.matches('└').count(), count);
                 assert_eq!(bottom_line.matches('┘').count(), count);

@@ -32,8 +32,9 @@ cargo build --release
 
 Run `pace preview [OPTIONS]` to print static samples of the renderers (excluding
 shuffle) and exit. The compact grid uses one column in narrow terminals, two at
-100 characters wide, and three at 150. Panels are 12–16 rows tall, with a small
-heading and muted borders. To preview with a specific color depth:
+100 characters wide, and three at 150. Renderers appear alphabetically, left to
+right and then down. Panels are 18–24 rows tall, with a small heading and muted
+borders. To preview with a specific color depth:
 
 ```sh
 ./target/release/pace preview --color-depth 256

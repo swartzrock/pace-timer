@@ -8,30 +8,57 @@ fn pace(args: &[&str]) -> std::process::Output {
 }
 
 #[test]
-fn help_lists_every_original_renderer_and_tools() {
-    let output = pace(&["--help"]);
-    assert!(output.status.success());
-    let text = String::from_utf8(output.stdout).unwrap();
-    for name in pace::model::RENDERER_NAMES {
-        assert!(text.contains(name), "{name}");
+fn help_describes_timers_and_public_preview() {
+    for args in [vec![], vec!["--help"], vec!["-h"], vec!["help"]] {
+        let output = pace(&args);
+        assert!(output.status.success());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("pace DURATION [RENDERER] [OPTIONS]"));
+        assert!(text.contains("pace preview [OPTIONS]"));
+        assert!(text.contains("Print renderer previews and exit"));
+        for name in pace::model::RENDERER_NAMES {
+            assert!(text.contains(name), "{name}");
+        }
+        for private_or_legacy in [
+            "TOOLS",
+            "pace tools",
+            "allfonts",
+            "colorblocks",
+            "[timer]",
+            "DURATION:",
+            "pace timer",
+            "--no-color",
+        ] {
+            assert!(
+                !text.contains(private_or_legacy),
+                "{args:?}: {private_or_legacy}"
+            );
+        }
+        for option in ["--show-fps", "--color-depth auto|truecolor|256|16|1"] {
+            assert!(text.contains(option));
+        }
     }
-    for name in ["preview", "allfonts", "colorblocks", "version"] {
-        assert!(text.contains(name));
-    }
-    for option in [
-        "--show-fps",
-        "--no-color",
-        "--color-depth auto|truecolor|256|16",
-    ] {
-        assert!(text.contains(option));
+}
+
+#[test]
+fn public_preview_matches_personal_alias_with_each_color_depth() {
+    use pace::cli;
+    for depth in ["auto", "truecolor", "256", "16", "1"] {
+        let alias = ["tools", "preview", "--color-depth", depth].map(String::from);
+        let expected = cli::parse(&alias).unwrap();
+        for args in [
+            vec!["preview", "--color-depth", depth],
+            vec!["--color-depth", depth, "preview"],
+        ] {
+            let args = args.into_iter().map(String::from).collect::<Vec<_>>();
+            assert_eq!(cli::parse(&args).unwrap(), expected, "{args:?}");
+        }
     }
 }
 
 #[test]
 fn help_explains_the_original_typescript_tools() {
     for args in [
-        vec![],
-        vec!["--help"],
         vec!["tools"],
         vec!["tools", "--help"],
         vec!["help", "tools"],
@@ -52,7 +79,7 @@ fn help_explains_the_original_typescript_tools() {
 
 #[test]
 fn preview_keeps_the_original_tools_panel_frames() {
-    let output = pace(&["tools", "preview", "--no-color"]);
+    let output = pace(&["preview", "--color-depth", "1"]);
     assert!(output.status.success());
     let text = String::from_utf8(output.stdout).unwrap();
     let panels = pace::renderers::PREVIEW_RENDERERS.len();
@@ -74,13 +101,22 @@ fn invalid_input_exits_with_a_useful_error_before_terminal_setup() {
     for args in [
         &["wat", "pie"][..],
         &["1s", "nope"],
+        &["timer", "1s"],
+        &["timer", "1s", "pie"],
+        &["1s:pie"],
+        &["1s:pie", "bar"],
+        &["1s", "pie", "extra"],
+        &["1s", "--no-color"],
         &["tools", "wat"],
         &["tools", "version", "extra"],
+        &["preview", "extra"],
+        &["preview", "--show-fps"],
     ] {
         let output = pace(args);
         assert!(!output.status.success(), "{args:?}");
         let error = String::from_utf8(output.stderr).unwrap();
         assert!(error.contains("pace:"), "{error}");
+        assert!(!error.contains("interactive terminal"), "{args:?}: {error}");
         assert!(!output.stdout.contains(&0x1b));
     }
 }
@@ -99,7 +135,7 @@ fn timer_refuses_piped_output_without_changing_terminal_modes() {
 
 #[test]
 fn preview_contains_all_eleven_non_shuffle_renderers() {
-    let output = pace(&["tools", "preview"]);
+    let output = pace(&["preview"]);
     assert!(
         output.status.success(),
         "{}",
@@ -107,7 +143,7 @@ fn preview_contains_all_eleven_non_shuffle_renderers() {
     );
     let text = String::from_utf8(output.stdout).unwrap();
     for name in pace::renderers::PREVIEW_RENDERERS {
-        let title = format!("{}{}", name[..1].to_uppercase(), &name[1..]);
+        let title = format!(" {name} ");
         assert!(text.contains(&title), "{title}");
     }
 }
@@ -144,16 +180,10 @@ fn font_and_color_catalog_tools_preserve_original_catalogs() {
 }
 
 #[test]
-fn legacy_parser_characterization() {
+fn space_separated_timers_and_personal_tools_parse() {
     use pace::cli::{self, Command as ParsedCommand};
     use std::time::Duration;
-    for (args, renderer) in [
-        (vec!["3m10s", "pie"], "pie"),
-        (vec!["timer", "3m10s", "pie"], "pie"),
-        (vec!["3m10s:pie"], "pie"),
-        (vec!["3m10s:pie", "bar"], "pie"),
-        (vec!["3m10s"], "shuffle"),
-    ] {
+    for (args, renderer) in [(vec!["3m10s", "pie"], "pie"), (vec!["3m10s"], "shuffle")] {
         let args = args.into_iter().map(String::from).collect::<Vec<_>>();
         assert_eq!(
             cli::parse(&args).unwrap().command,
@@ -168,6 +198,7 @@ fn legacy_parser_characterization() {
         (vec!["help"], ParsedCommand::Help),
         (vec!["garbage", "--help"], ParsedCommand::Help),
         (vec!["--version"], ParsedCommand::Version),
+        (vec!["preview"], ParsedCommand::Preview),
         (vec!["tools", "preview"], ParsedCommand::Preview),
         (vec!["tools", "allfonts"], ParsedCommand::AllFonts),
         (vec!["tools", "colorblocks"], ParsedCommand::ColorBlocks),
@@ -185,20 +216,8 @@ fn output_flags_parse_anywhere_and_preserve_timer_operands() {
         color::{ColorDepth, OutputOptions},
     };
     for args in [
-        vec![
-            "--color-depth",
-            "truecolor",
-            "timer",
-            "3m10s",
-            "pie",
-            "--show-fps",
-        ],
-        vec![
-            "timer",
-            "--show-fps",
-            "3m10s:pie",
-            "--color-depth=truecolor",
-        ],
+        vec!["--color-depth", "truecolor", "3m10s", "pie", "--show-fps"],
+        vec!["3m10s", "--show-fps", "pie", "--color-depth=truecolor"],
     ] {
         let args = args.into_iter().map(String::from).collect::<Vec<_>>();
         let parsed = cli::parse(&args).unwrap();
@@ -206,7 +225,6 @@ fn output_flags_parse_anywhere_and_preserve_timer_operands() {
             parsed.options,
             OutputOptions {
                 color_depth: ColorDepth::Truecolor,
-                no_color: false,
                 show_fps: true
             }
         );
@@ -223,7 +241,7 @@ fn output_flags_parse_anywhere_and_preserve_timer_operands() {
         vec!["1s", "--color-depth="],
         vec!["1s", "--color-depth=8"],
         vec!["1s", "--color-depth=16", "--color-depth=auto"],
-        vec!["1s", "--no-color", "--no-color"],
+        vec!["1s", "--no-color"],
         vec!["1s", "--show-fps", "--show-fps"],
         vec!["1s", "--wat"],
         vec!["tools", "preview", "--show-fps"],
@@ -234,18 +252,25 @@ fn output_flags_parse_anywhere_and_preserve_timer_operands() {
 }
 
 #[test]
-fn every_tool_honors_pipe_explicit_depth_and_no_color() {
-    for tool in ["preview", "allfonts", "colorblocks"] {
+fn every_tool_honors_pipe_and_explicit_color_modes() {
+    for command in [
+        &["preview"][..],
+        &["tools", "preview"],
+        &["tools", "allfonts"],
+        &["tools", "colorblocks"],
+    ] {
+        let tool = command.join(" ");
         for (flags, expected) in [
             (vec![], "mono"),
             (vec!["--color-depth=auto"], "mono"),
             (vec!["--color-depth=truecolor"], "rgb"),
             (vec!["--color-depth=256"], "256"),
             (vec!["--color-depth=16"], "16"),
-            (vec!["--color-depth=truecolor", "--no-color"], "mono"),
+            (vec!["--color-depth=1"], "mono"),
+            (vec!["--color-depth", "1"], "mono"),
         ] {
             let output = Command::new(env!("CARGO_BIN_EXE_pace"))
-                .args(["tools", tool])
+                .args(command)
                 .args(flags)
                 .env("TERM", "xterm-256color")
                 .env("COLORTERM", "truecolor")
@@ -290,16 +315,11 @@ fn shader_fields_are_registered_for_selection_preview_and_shuffle() {
     let preview = String::from_utf8(output.stdout).unwrap();
     for name in ["aurora", "tide", "interference"] {
         assert!(PREVIEW_RENDERERS.contains(&name));
-        for args in [
-            vec!["5m".into(), name.into()],
-            vec!["timer".into(), "5m".into(), name.into()],
-            vec![format!("5m:{name}")],
-        ] {
-            assert!(
-                matches!(cli::parse(&args).map(|parsed| parsed.command), Ok(CliCommand::Timer { renderer, .. }) if renderer == name)
-            );
-        }
-        let title = format!("{}{}", name[..1].to_uppercase(), &name[1..]);
+        let args = vec!["5m".into(), name.into()];
+        assert!(
+            matches!(cli::parse(&args).map(|parsed| parsed.command), Ok(CliCommand::Timer { renderer, .. }) if renderer == name)
+        );
+        let title = format!(" {name} ");
         assert!(preview.contains(&title), "{name}");
     }
 }

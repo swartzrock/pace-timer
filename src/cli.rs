@@ -42,12 +42,7 @@ pub fn parse(args: &[String]) -> Result<Parsed, String> {
     let mut index = 0;
     while index < args.len() {
         let arg = args[index].as_str();
-        if arg == "--no-color" {
-            if options.no_color {
-                return Err("Repeated --no-color".into());
-            }
-            options.no_color = true;
-        } else if arg == "--show-fps" {
+        if arg == "--show-fps" {
             if options.show_fps {
                 return Err("Repeated --show-fps".into());
             }
@@ -70,9 +65,10 @@ pub fn parse(args: &[String]) -> Result<Parsed, String> {
                 "truecolor" => ColorDepth::Truecolor,
                 "256" => ColorDepth::Ansi256,
                 "16" => ColorDepth::Ansi16,
+                "1" => ColorDepth::Monochrome,
                 _ => {
                     return Err(format!(
-                        "Invalid --color-depth '{value}'; choose auto, truecolor, 256, or 16"
+                        "Invalid --color-depth '{value}'; choose auto, truecolor, 256, 16, or 1"
                     ));
                 }
             };
@@ -97,6 +93,9 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
     if args == ["--version"] {
         return Ok(Command::Version);
     }
+    if args == ["preview"] {
+        return Ok(Command::Preview);
+    }
     if args[0] == "tools" {
         if args.len() == 1 {
             return Ok(Command::ToolsHelp);
@@ -112,16 +111,11 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
             other => Err(format!("Unknown tool '{other}'")),
         };
     }
-    let args = if args[0] == "timer" { &args[1..] } else { args };
-    if args.is_empty() || args.len() > 2 {
-        return Err("Expected: pace [timer] DURATION [RENDERER]".into());
+    if args.len() > 2 {
+        return Err("Expected: pace DURATION [RENDERER] [OPTIONS]".into());
     }
-    let (duration, combined_renderer) = args[0]
-        .split_once(':')
-        .map_or((args[0].as_str(), None), |(d, r)| (d, Some(r)));
-    let renderer = combined_renderer
-        .or_else(|| args.get(1).map(String::as_str))
-        .unwrap_or("shuffle");
+    let duration = parse_duration(&args[0])?;
+    let renderer = args.get(1).map(String::as_str).unwrap_or("shuffle");
     if !RENDERER_NAMES.contains(&renderer) {
         return Err(format!(
             "Unknown renderer '{renderer}'. Choose: {}",
@@ -129,7 +123,7 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
         ));
     }
     Ok(Command::Timer {
-        duration: parse_duration(duration)?,
+        duration,
         renderer: renderer.into(),
     })
 }
@@ -170,7 +164,7 @@ pub fn parse_duration(input: &str) -> Result<Duration, String> {
 }
 
 const TOOL_DESCRIPTIONS: &str =
-    "  preview      Preview all renderers in framed pairs (excluding shuffle)
+    "  preview      Preview all renderers in a compact grid (excluding shuffle)
   allfonts     Display FIGlet font samples and timer widths
   colorblocks  Display color gradients and palettes
   version      Print the Pace version";
@@ -186,9 +180,8 @@ TOOLS
 {TOOL_DESCRIPTIONS}
 
 OUTPUT
-  --color-depth auto|truecolor|256|16  Choose the output color depth
-  --no-color                          Disable color
-  Redirected output is monochrome by default; use an explicit depth to keep colors.
+  --color-depth auto|truecolor|256|16|1  Colors (default: auto; 1: monochrome)
+  Redirected output is monochrome by default.
 
 EXAMPLES
   pace tools preview
@@ -204,43 +197,36 @@ pub fn help() -> String {
         "Pace — visual countdown timer
 
 USAGE
-  pace [timer] DURATION [RENDERER]
-  pace DURATION:RENDERER
-  pace tools [TOOL]
+  pace DURATION [RENDERER] [OPTIONS]
+  pace preview [OPTIONS]
 
 DURATION
-  Minutes and seconds: 5m, 3m10s, 30s, 2.5m
+  The timer ends after this duration. Use minutes (m) and/or seconds (s).
+  Examples: 5m, 3m10s, 30s, 2.5m
 
 RENDERERS
   {}
   Default: shuffle (switches every 10 seconds)
 
-TOOLS
-{TOOL_DESCRIPTIONS}
-  Run 'pace tools' or 'pace help tools' for tool usage and examples.
-
 OPTIONS
-  --help, -h                          Show help
-  --version                           Print the Pace version
-  --color-depth auto|truecolor|256|16  Output color depth (default: auto)
-  --no-color                          Disable color, including explicit depth
-  --show-fps                          Show delivered frame rate (timers only)
-  Flags may precede or follow operands; each flag may appear once.
-  Auto honors nonempty NO_COLOR; explicit depth overrides it and enables color in pipes.
-  Auto uses TERM/COLORTERM hints; SSH/tmux context alone does not prove RGB support.
+  --show-fps                           Show frame rate in the footer
+  --color-depth auto|truecolor|256|16|1  Colors (default: auto; 1: monochrome)
+
+INFORMATION
+  preview     Print renderer previews and exit
+  --help, -h  Print help and exit
+  --version   Print the Pace version and exit
 
 CONTROLS
   Space: pause/resume    Ctrl-C: exit
 
 EXAMPLES
+  pace 5m
+  pace preview
   pace 5m pie
-  pace timer 2.5m lava
-  pace 3m10s:shuffle
-  pace tools preview
-  pace tools allfonts
-  pace tools colorblocks
-  pace tools version
-  pace 1m lava --show-fps --color-depth truecolor
+  pace 2.5m lava
+  pace 3m10s shuffle
+  pace 1m interference --show-fps
 ",
         RENDERER_NAMES.join(", ")
     )
@@ -254,20 +240,14 @@ mod tests {
     }
 
     #[test]
-    fn accepts_original_command_forms() {
-        for values in [
-            vec!["3m10s", "pie"],
-            vec!["timer", "3m10s", "pie"],
-            vec!["3m10s:pie"],
-        ] {
-            assert_eq!(
-                parse(&args(&values)).unwrap().command,
-                Command::Timer {
-                    duration: Duration::from_secs(190),
-                    renderer: "pie".into()
-                }
-            );
-        }
+    fn accepts_duration_and_optional_renderer() {
+        assert_eq!(
+            parse(&args(&["3m10s", "pie"])).unwrap().command,
+            Command::Timer {
+                duration: Duration::from_secs(190),
+                renderer: "pie".into()
+            }
+        );
         assert_eq!(
             parse(&args(&["2.5m"])).unwrap().command,
             Command::Timer {

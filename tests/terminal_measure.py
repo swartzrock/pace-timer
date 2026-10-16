@@ -25,11 +25,11 @@ def main():
     executable = str(pathlib.Path(sys.argv[1]).resolve())
     cases = [(name, depth) for depth in ["truecolor", "256"]
              for name in ["bar", "bigtext", "colorwheel", "lava", "shuffle"]]
-    cases += [("colorwheel", depth) for depth in ["16", "mono"]]
+    cases += [("colorwheel", depth) for depth in ["16", "1"]]
     print("120x40 draining PTY; first completion includes process/setup; 1s observed window.")
     print("renderer depth first_ms completed/s KiB/s bytes/completion", flush=True)
     for name, depth in cases:
-        flags = ["--no-color"] if depth == "mono" else ["--color-depth", depth]
+        flags = ["--color-depth", depth]
         timer = MeasuredTimer(executable, "60s", name, "--show-fps", *flags,
                               environment={"NO_COLOR": "", "COLORTERM": "truecolor"})
         timer.resize(120, 40)

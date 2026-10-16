@@ -1,31 +1,48 @@
 use crate::{
     color::{OutputPolicy, adapt_buffer, indexed_rgb},
     fonts::{FONT_NAMES, Fonts},
-    graphics::{centered_text, put},
+    graphics::{centered_text, put, text},
     model::TimerDetails,
     palette::{self, COLOR_NAMES},
     renderers::{PREVIEW_RENDERERS, Renderers},
 };
-use ratatui::{buffer::Buffer, layout::Rect, style::Color};
+use ratatui::{
+    buffer::Buffer,
+    layout::{Margin, Rect},
+    style::Color,
+};
 use std::io::{self, Write};
 
 pub fn preview(out: &mut impl Write, policy: OutputPolicy) -> io::Result<()> {
-    let (width, height) = crossterm::terminal::size().unwrap_or((120, 40));
-    let cell_width = (width / 2).saturating_sub(1).max(1);
-    let cell_height = (height / 2).saturating_sub(1).max(1);
-    let mut fonts = Fonts::new();
-    writeln!(out, "\n")?;
-    gradient_text(
+    preview_at_size(
         out,
-        &fonts.render("ANSI Regular", "pace renderers"),
-        palette::DOUBLE_GRADIENTS[6].1,
         policy,
-    )?;
+        crossterm::terminal::size().unwrap_or((120, 40)),
+    )
+}
+
+fn preview_at_size(
+    out: &mut impl Write,
+    policy: OutputPolicy,
+    (width, height): (u16, u16),
+) -> io::Result<()> {
+    let columns = (width / 50).clamp(1, 3);
+    // Leave the final terminal column unused so a printed row cannot auto-wrap.
+    let width = width.saturating_sub(1).max(1);
+    let cell_width = (width - (columns - 1)) / columns;
+    let cell_height = (height.saturating_sub(4) / 2).clamp(12, 16) * 3 / 2;
+    let mut heading = Buffer::empty(Rect::new(0, 0, width, 3));
+    let area = heading.area;
+    text(&mut heading, area, 0, 0, "Pace renderers", 252);
+    text(&mut heading, area, 0, 1, "Try one: pace 5m tide", 244);
+    write_buffer(out, &heading, policy)?;
     let mut renderers = Renderers::new();
-    for pair in PREVIEW_RENDERERS.chunks(2) {
-        let bounds = Rect::new(0, 0, width.max(1), cell_height);
+    let mut names = PREVIEW_RENDERERS.to_vec();
+    names.sort_unstable();
+    for row in names.chunks(usize::from(columns)) {
+        let bounds = Rect::new(0, 0, width, cell_height);
         let mut buf = Buffer::empty(bounds);
-        for (i, name) in pair.iter().enumerate() {
+        for (i, name) in row.iter().enumerate() {
             let area = Rect::new((i as u16) * (cell_width + 1), 0, cell_width, cell_height);
             renderers.render(
                 name,
@@ -33,21 +50,21 @@ pub fn preview(out: &mut impl Write, policy: OutputPolicy) -> io::Result<()> {
                     elapsed: 199.9,
                     duration: 300.0,
                 },
-                area,
+                area.inner(Margin::new(1, 1)),
                 &mut buf,
             );
             for x in 0..i32::from(area.width) {
-                put(&mut buf, area, x, 0, "─", 239);
+                put(&mut buf, area, x, 0, "─", 238);
             }
             if area.width >= 2 && area.height >= 2 {
                 let right = i32::from(area.width) - 1;
                 let bottom = i32::from(area.height) - 1;
                 for x in 1..right {
-                    put(&mut buf, area, x, bottom, "─", 239);
+                    put(&mut buf, area, x, bottom, "─", 238);
                 }
                 for y in 1..bottom {
-                    put(&mut buf, area, 0, y, "│", 239);
-                    put(&mut buf, area, right, y, "│", 239);
+                    put(&mut buf, area, 0, y, "│", 238);
+                    put(&mut buf, area, right, y, "│", 238);
                 }
                 for (x, y, symbol) in [
                     (0, 0, "┌"),
@@ -55,11 +72,11 @@ pub fn preview(out: &mut impl Write, policy: OutputPolicy) -> io::Result<()> {
                     (0, bottom, "└"),
                     (right, bottom, "┘"),
                 ] {
-                    put(&mut buf, area, x, y, symbol, 239);
+                    put(&mut buf, area, x, y, symbol, 238);
                 }
+                let label = Rect::new(area.x + 1, area.y, area.width - 2, 1);
+                centered_text(&mut buf, label, 0, &format!(" {name} "), 250);
             }
-            let title = format!(" {}{} ", name[..1].to_uppercase(), &name[1..]);
-            centered_text(&mut buf, area, 0, &title, 15);
         }
         write_buffer(out, &buf, policy)?;
         writeln!(out)?;
@@ -247,4 +264,84 @@ pub fn write_buffer(out: &mut impl Write, buf: &Buffer, policy: OutputPolicy) ->
         writeln!(out)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preview_borders_remain_gray_in_sixteen_color_output() {
+        let mut output = Vec::new();
+        preview_at_size(&mut output, OutputPolicy::Ansi16, (100, 35)).unwrap();
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("\x1b[90m┌"));
+    }
+
+    #[test]
+    fn preview_grid_adapts_columns_and_keeps_panels_compact() {
+        for (width, height, columns) in [
+            (80, 24, 1),
+            (99, 35, 1),
+            (100, 35, 2),
+            (149, 40, 2),
+            (150, 40, 3),
+            (200, 60, 3),
+        ] {
+            let mut output = Vec::new();
+            preview_at_size(&mut output, OutputPolicy::Monochrome, (width, height)).unwrap();
+            let output = String::from_utf8(output).unwrap();
+            let lines: Vec<_> = output.lines().collect();
+            assert_eq!(lines[0].trim_end(), "Pace renderers");
+            assert_eq!(lines[1].trim_end(), "Try one: pace 5m tide");
+            assert!(
+                lines
+                    .iter()
+                    .all(|line| line.chars().count() < width as usize)
+            );
+            let tops: Vec<_> = lines
+                .iter()
+                .enumerate()
+                .filter(|(_, line)| line.contains('┌'))
+                .collect();
+            assert_eq!(tops.len(), PREVIEW_RENDERERS.len().div_ceil(columns));
+            let names: Vec<_> = tops
+                .iter()
+                .flat_map(|(_, line)| line.split_whitespace())
+                .filter(|word| word.chars().all(|ch| ch.is_ascii_lowercase()))
+                .collect();
+            assert_eq!(names.len(), PREVIEW_RENDERERS.len());
+            assert!(names.windows(2).all(|pair| pair[0] < pair[1]));
+            for (index, (top, line)) in tops.iter().enumerate() {
+                let count = columns.min(PREVIEW_RENDERERS.len() - index * columns);
+                assert_eq!(line.matches('┌').count(), count);
+                assert_eq!(line.matches('┐').count(), count);
+                let bottom = lines[*top + 1..]
+                    .iter()
+                    .position(|line| line.contains('└'))
+                    .unwrap();
+                assert!((18..=24).contains(&(bottom + 2)));
+                let bottom_line = lines[*top + bottom + 1];
+                assert_eq!(bottom_line.matches('└').count(), count);
+                assert_eq!(bottom_line.matches('┘').count(), count);
+            }
+            for name in PREVIEW_RENDERERS {
+                assert!(output.contains(&format!(" {name} ")), "{name}");
+            }
+            assert!(!output.contains('\x1b'));
+        }
+    }
+
+    #[test]
+    fn preview_grid_handles_tiny_terminals() {
+        for size in [(0, 0), (1, 1), (2, 2), (15, 5)] {
+            let mut output = Vec::new();
+            preview_at_size(&mut output, OutputPolicy::Monochrome, size).unwrap();
+            let output = String::from_utf8(output).unwrap();
+            assert!(!output.is_empty());
+            assert!(output.lines().all(|line| {
+                line.chars().count() <= usize::from(size.0.saturating_sub(1).max(1))
+            }));
+        }
+    }
 }

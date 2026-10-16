@@ -10,13 +10,16 @@ frames do not speed up effects or lengthen the timer. Missed frames are skipped.
 
 ## Run
 
+Start a timer with `pace DURATION [RENDERER] [OPTIONS]`. The renderer defaults to
+`shuffle`; durations use minutes and seconds, such as `5m`, `3m10s`, or `2.5m`.
+
 With Rust and Cargo installed, run these commands from this folder:
 
 ```sh
-cargo run --release -- 5m shuffle
+cargo run --release -- 5m
 cargo run --release -- 3m10s pie
-cargo run --release -- timer 2.5m lava
-cargo run --release -- 1m:sine
+cargo run --release -- 2.5m lava
+cargo run --release -- 1m sine
 ```
 
 To build a standalone executable:
@@ -24,6 +27,17 @@ To build a standalone executable:
 ```sh
 cargo build --release
 ./target/release/pace 5m shuffle
+./target/release/pace --help
+```
+
+Run `pace preview [OPTIONS]` to print static samples of the renderers (excluding
+shuffle) and exit. The compact grid uses one column in narrow terminals, two at
+100 characters wide, and three at 150. Renderers appear alphabetically, left to
+right and then down. Panels are 18–24 rows tall, with a small heading and muted
+borders. To preview with a specific color depth:
+
+```sh
+./target/release/pace preview --color-depth 256
 ```
 
 On Windows the executable is `target\release\pace.exe`. The countdown requires
@@ -38,20 +52,19 @@ files are not required.
 ./target/release/pace 1m colorwheel --color-depth truecolor
 ./target/release/pace 1m pie --color-depth 256
 ./target/release/pace 1m sine --color-depth 16
-./target/release/pace 1m bigtext --no-color
-./target/release/pace tools preview --color-depth truecolor
+./target/release/pace 1m bigtext --color-depth 1
 ```
 
-`--color-depth auto|truecolor|256|16` defaults to `auto`. Auto uses positive
-`COLORTERM=truecolor|24bit` or direct-color `TERM` hints for RGB, a 256-color
-hint for indexed color, recognized ANSI terminals for 16 colors, and otherwise
-monochrome. `TERM=dumb` uses monochrome. SSH and tmux can hide capability hints;
-force a depth when you know the full terminal connection supports it.
+`--color-depth auto|truecolor|256|16|1` defaults to `auto`. Use `1` for monochrome
+output. Auto uses positive `COLORTERM=truecolor|24bit` or direct-color `TERM`
+hints for RGB, a 256-color hint for indexed color, recognized ANSI terminals for
+16 colors, and otherwise monochrome. `TERM=dumb` uses monochrome.
+SSH and tmux can hide capability hints; force a depth when you know the full
+terminal connection supports it.
 
-`--no-color` always wins. Otherwise an explicit non-auto depth wins over
-nonempty `NO_COLOR` and enables colored output in pipes. Auto honors `NO_COLOR`
-and makes redirected tools monochrome. Flags can appear before or after operands;
-each flag may appear once. Both foreground and background use the selected depth.
+An explicit color depth overrides automatic detection and `NO_COLOR`. Auto
+honors `NO_COLOR`. Flags can appear before or after operands; each flag may
+appear once. Both foreground and background use the selected depth.
 
 The muted footer shows elapsed / total time on the left and `Space: pause` or
 `Space: resume` in the center. Shuffle also shows the current renderer and the
@@ -65,7 +78,7 @@ emulator's screen painting. `FPS --` means warming up; `FPS paused` means paused
 Resuming starts a fresh window. Narrow terminals hide labels that cannot fit,
 and a one-row terminal prioritizes the countdown over the footer.
 
-## Renderers and tools
+## Renderers
 
 All 12 original renderer names are available: `bar`, `bigtext`, `circles`,
 `colorwheel`, `colossal`, `dots`, `lava`, `pie`, `shuffle`, `sine`, `slant`, `sweep`.
@@ -84,7 +97,7 @@ and soft shadows. Shuffle feathers backgrounds while keeping one complete countd
 
 New renderers use true-color half-block cells for smooth gradients and two
 vertical samples per character, without a GPU or extra runtime. They work best
-in a 24-bit-color terminal and are included in preview and shuffle:
+in a 24-bit-color terminal and are included in shuffle:
 
 - `aurora` (Aurora Veil): mint and violet light curtains retreat from right to left.
 - `tide`: an ocean recedes with broad horizontal swells and a little foam along
@@ -100,28 +113,8 @@ cargo run --release -- 5m tide
 cargo run --release -- 5m interference
 ```
 
-All four TypeScript tools are available. Run `pace tools` or `pace help tools`
-for their usage:
-
-| Command | Output |
-| --- | --- |
-| `pace tools preview` | Framed previews of every renderer except shuffle, in pairs |
-| `pace tools allfonts` | All 289 FIGlet fonts, the sample `23 Quick foxes`, and maximum timer widths |
-| `pace tools colorblocks` | The original single/double gradients and named color palettes |
-| `pace tools version` | The current Pace version |
-
-```sh
-cargo run --release -- tools
-cargo run --release -- tools preview
-cargo run --release -- tools allfonts
-cargo run --release -- tools colorblocks
-cargo run --release -- tools version
-cargo run --release -- --help
-```
-
-The font catalog includes all 289 original fonts. Its layout is checked against
-306 original FIGlet.js outputs. Source font notices and the FIGlet.js license are
-preserved under `assets/`.
+Font layout is checked against 306 original FIGlet.js outputs. Source font notices
+and the FIGlet.js license are preserved under `assets/`.
 
 The documented decimal duration form (`2.5m`) now means 150 seconds; the old
 parser accidentally interpreted it as five minutes. Invalid duration text

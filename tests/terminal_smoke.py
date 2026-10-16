@@ -69,7 +69,7 @@ def main():
         assert elapsed < 1.5, (renderer, elapsed)
     print(f"PASS: all {len(renderers)} renderers complete and restore terminal modes")
 
-    timer = Timer(executable, "timer", "0.8s", "sine")
+    timer = Timer(executable, "0.8s", "sine")
     timer.drain(0.2)
     os.write(timer.master, b" ")
     timer.drain(0.45)
@@ -79,7 +79,7 @@ def main():
     assert 1.15 < elapsed < 2.2, elapsed
     print("PASS: space pauses/resumes countdown and animation")
 
-    timer = Timer(executable, "10s:shuffle")
+    timer = Timer(executable, "10s", "shuffle")
     timer.drain(0.15)
     timer.resize(1, 1)
     timer.drain(0.12)
@@ -95,7 +95,7 @@ def main():
     timer.finish()
     print("PASS: SIGTERM restores terminal")
 
-    timer = Timer(executable, "3s", "sine", "--show-fps", "--no-color")
+    timer = Timer(executable, "3s", "sine", "--show-fps", "--color-depth", "1")
     timer.drain(0.25)
     # The diff backend may encode the label's separating space as cursor movement.
     assert b"FPS" in timer.output and b"--" in timer.output, "FPS warmup not displayed"
@@ -131,10 +131,10 @@ def main():
         else:
             assert not re.search(rb"(?:38|48);[25];", timer.output), "16-color output used extended SGR"
             assert re.search(rb"\x1b\[(?:[0-9]+;)*(?:3[0-7]|9[0-7])(?:;[0-9]+)*m", timer.output), "basic ANSI color absent"
-    timer = Timer(executable, "0.12s", "pie", "--color-depth", "truecolor", "--no-color",
-                  environment={"NO_COLOR": "1"})
+    timer = Timer(executable, "0.12s", "pie", "--color-depth", "1",
+                  environment={"NO_COLOR": "", "COLORTERM": "truecolor"})
     timer.finish()
-    assert not re.search(rb"(?:38|48);[25];", timer.output), "--no-color lost precedence"
+    assert not re.search(rb"\x1b\[(?:38|48);|\x1b\[(?:[0-9]+;)*(?:3[0-7]|4[0-7]|9[0-7]|10[0-7])(?:;[0-9]+)*m", timer.output), "--color-depth 1 emitted color"
     print("PASS: actual timer color depth and NO_COLOR override precedence")
 
 

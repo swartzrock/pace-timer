@@ -53,6 +53,11 @@ nonempty `NO_COLOR` and enables colored output in pipes. Auto honors `NO_COLOR`
 and makes redirected tools monochrome. Flags can appear before or after operands;
 each flag may appear once. Both foreground and background use the selected depth.
 
+The muted footer shows elapsed / total time on the left and `Space: pause` or
+`Space: resume` in the center. Shuffle also shows the current renderer and the
+next renderer during a transition. Narrow terminals shorten the time display and
+hide hints or FPS when they would overlap; one-row terminals show only the timer.
+
 `--show-fps` is optional and timer-only. Its bottom-right label measures successful
 completed draws per second, including terminal I/O and scheduled waiting over a
 roughly one-second window. It measures the draw loop rather than the terminal

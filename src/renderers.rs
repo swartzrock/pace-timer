@@ -120,13 +120,10 @@ impl Renderers {
             return String::new();
         }
         let (current, next, phase) = self.shuffle_state(details);
-        if phase >= 0.8 {
-            format!("Shuffle: loading the \"{next}\" renderer...")
+        if phase >= 0.75 {
+            format!("{current} -> {next}")
         } else {
-            format!(
-                "Shuffle: showing the \"{current}\" renderer for {} more seconds...",
-                (10.0 - details.elapsed % 10.0).ceil() as u32
-            )
+            current.to_owned()
         }
     }
 

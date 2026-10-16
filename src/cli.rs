@@ -164,7 +164,7 @@ pub fn parse_duration(input: &str) -> Result<Duration, String> {
 }
 
 const TOOL_DESCRIPTIONS: &str =
-    "  preview      Preview all renderers in framed pairs (excluding shuffle)
+    "  preview      Preview all renderers in a compact grid (excluding shuffle)
   allfonts     Display FIGlet font samples and timer widths
   colorblocks  Display color gradients and palettes
   version      Print the Pace version";

@@ -143,7 +143,7 @@ fn preview_contains_all_eleven_non_shuffle_renderers() {
     );
     let text = String::from_utf8(output.stdout).unwrap();
     for name in pace::renderers::PREVIEW_RENDERERS {
-        let title = format!("{}{}", name[..1].to_uppercase(), &name[1..]);
+        let title = format!(" {name} ");
         assert!(text.contains(&title), "{title}");
     }
 }
@@ -319,7 +319,7 @@ fn shader_fields_are_registered_for_selection_preview_and_shuffle() {
         assert!(
             matches!(cli::parse(&args).map(|parsed| parsed.command), Ok(CliCommand::Timer { renderer, .. }) if renderer == name)
         );
-        let title = format!("{}{}", name[..1].to_uppercase(), &name[1..]);
+        let title = format!(" {name} ");
         assert!(preview.contains(&title), "{name}");
     }
 }

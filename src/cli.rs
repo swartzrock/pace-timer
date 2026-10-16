@@ -197,18 +197,20 @@ USAGE
   pace DURATION [RENDERER] [OPTIONS]
 
 DURATION
-  Minutes and seconds: 5m, 3m10s, 30s, 2.5m
+  The timer ends after this duration. Use minutes (m) and/or seconds (s).
+  Examples: 5m, 3m10s, 30s, 2.5m
 
 RENDERERS
   {}
   Default: shuffle (switches every 10 seconds)
 
+FLAGS
+  --help, -h  Show help
+  --version   Print the Pace version
+  --show-fps  Show frame rate in the footer
+
 OPTIONS
-  --help, -h                             Show help
-  --version                              Print the Pace version
   --color-depth auto|truecolor|256|16|1  Colors (default: auto; 1: monochrome)
-  --show-fps                             Show frame rate in the footer
-  Flags may precede or follow operands; each flag may appear once.
 
 CONTROLS
   Space: pause/resume    Ctrl-C: exit

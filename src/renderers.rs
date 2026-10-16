@@ -1,12 +1,18 @@
 use crate::{
     effects::Effects,
     fonts::Fonts,
-    graphics::{centered, centered_text, double_box, progress_color, progress_gradient, put, text},
+    graphics::{
+        centered, centered_text, double_box, gradient as rgb_gradient, mix, progress_color,
+        progress_gradient, put_color, text,
+    },
     model::TimerDetails,
 };
 use rand::seq::SliceRandom;
 use ratatui::style::Color;
-use ratatui::{buffer::Buffer, layout::Rect};
+use ratatui::{
+    buffer::{Buffer, Cell},
+    layout::Rect,
+};
 
 pub const PREVIEW_RENDERERS: &[&str] = &[
     "pie",
@@ -65,13 +71,32 @@ impl Renderers {
             transition.resize(area);
             transition.reset();
             self.draw_one(next, details, area, &mut transition);
-            let split = ((phase - 0.75) * 4.0 * f64::from(area.width)) as u16;
+            let amount = (phase - 0.75) * 4.0;
+            let band = (f64::from(area.width) * 0.06).clamp(2.0, 8.0);
+            let edge = amount * (f64::from(area.width) + band * 2.0) - band;
             for y in area.y..area.bottom() {
-                for x in area.x..area.x + split.min(area.width) {
-                    buf[(x, y)] = transition[(x, y)].clone();
-                }
-                if split < area.width {
-                    put(buf, area, i32::from(split), i32::from(y - area.y), "░", 129);
+                for x in area.x..area.right() {
+                    let source = &mut buf[(x, y)];
+                    let destination = &transition[(x, y)];
+                    // A countdown uses one complete mask, never a dithered mixture of digits.
+                    if countdown_cell(current, source) || countdown_cell(next, destination) {
+                        let fg = transition_color(source.fg, destination.fg, amount);
+                        let bg = transition_color(source.bg, destination.bg, amount);
+                        if amount >= 0.5 {
+                            *source = destination.clone();
+                        }
+                        source.set_fg(fg).set_bg(bg);
+                    } else {
+                        let local =
+                            ((edge - f64::from(x - area.x)) / (band * 2.0) + 0.5).clamp(0.0, 1.0);
+                        feather_cell(
+                            source,
+                            destination,
+                            local * local * (3.0 - 2.0 * local),
+                            x - area.x,
+                            y - area.y,
+                        );
+                    }
                 }
             }
             self.transition = transition;
@@ -115,7 +140,7 @@ impl Renderers {
                 };
                 let gradient: &[u8] = match name {
                     "pie" => &[123, 159, 153, 147, 141, 135, 129],
-                    "colorwheel" => &[15],
+                    "colorwheel" => &[255, 15, 159],
                     "sine" => &[51, 45, 39, 33, 27, 21],
                     _ => progress_gradient(details.progress()),
                 };
@@ -180,35 +205,57 @@ impl Renderers {
                 69, 63, 57,
             ]
         };
-        for (row, line) in lines.iter().enumerate() {
-            let color = gradient[(row * gradient.len() / lines.len().max(1)
-                + if name == "colossal" {
-                    details.legacy_tick() as usize
-                } else {
-                    0
-                })
-                % gradient.len()];
-            for (col, ch) in line.iter().enumerate() {
-                let symbol = if name == "slant" && *ch == ' ' {
-                    '_'
-                } else {
-                    *ch
-                };
-                let fg = if name == "slant" {
-                    if symbol == '_' { 51 } else { 15 }
-                } else {
-                    color
-                };
-                for dy in 0..scale {
-                    for dx in 0..scale {
-                        put(
-                            buf,
-                            area,
-                            x + col as i32 * scale + dx,
-                            y + row as i32 * scale + dy,
-                            symbol.encode_utf8(&mut [0; 4]),
-                            fg,
-                        );
+        // Shadows are separate layers; foreground cells retain the original font mask.
+        for (offset, intensity) in [(2, 0.10), (1, 0.22), (0, 1.0)] {
+            for (row, line) in lines.iter().enumerate() {
+                for (col, ch) in line.iter().enumerate() {
+                    let symbol = if name == "slant" && *ch == ' ' {
+                        '_'
+                    } else {
+                        *ch
+                    };
+                    if symbol == ' ' && offset > 0 {
+                        continue;
+                    }
+                    let position = row as f64 / f64::from((height - 1).max(1)) * 0.75
+                        + col as f64 / f64::from((width - 1).max(1)) * 0.25;
+                    let mut color = rgb_gradient(
+                        gradient,
+                        if name == "colossal" {
+                            (position + details.elapsed * 0.12).rem_euclid(1.0)
+                        } else {
+                            position
+                        },
+                    );
+                    if name == "slant" {
+                        color = if symbol == '_' {
+                            rgb_gradient(&[39, 45, 51], position)
+                        } else {
+                            mix(Color::White, color, 0.22)
+                        };
+                    }
+                    if offset > 0 {
+                        color = mix(Color::Black, color, intensity);
+                    }
+                    for dy in 0..scale {
+                        for dx in 0..scale {
+                            let mut encoded = [0; 4];
+                            put_text_layer(
+                                buf,
+                                area,
+                                (
+                                    x + col as i32 * scale + dx + offset,
+                                    y + row as i32 * scale + dy + offset,
+                                ),
+                                if offset > 0 {
+                                    "░"
+                                } else {
+                                    symbol.encode_utf8(&mut encoded)
+                                },
+                                color,
+                                offset > 0,
+                            );
+                        }
                     }
                 }
             }
@@ -252,47 +299,108 @@ impl Renderers {
             centered_text(buf, area, i32::from(area.height) / 2, value, gradient[0]);
             return;
         }
-        for is_shadow in [true, false] {
+        for (offset, intensity) in [(2, 0.08), (1, 0.18), (0, 1.0)] {
             for (row, line) in lines.iter().enumerate() {
-                let color = gradient[row * gradient.len() / lines.len().max(1)];
                 for (col, ch) in line.iter().enumerate().filter(|(_, c)| **c != ' ') {
+                    let position = row as f64 / f64::from((height - 1).max(1)) * 0.75
+                        + col as f64 / f64::from((width - 1).max(1)) * 0.25;
+                    let color = rgb_gradient(gradient, position);
                     for dy in 0..scale {
                         for dx in 0..scale {
-                            let offset = i32::from(is_shadow);
                             let mut encoded = [0; 4];
-                            let symbol = if is_shadow {
+                            let symbol = if offset > 0 {
                                 shadow
                             } else if *ch == '█' {
                                 fill
                             } else {
                                 ch.encode_utf8(&mut encoded)
                             };
-                            // Uncolored shadows retain the effect color; circles/sine use black.
-                            let px = x + col as i32 * scale + dx + offset;
-                            let py = y + row as i32 * scale + dy + offset;
-                            if is_shadow
-                                && px >= 0
-                                && py >= 0
-                                && px < i32::from(area.width)
-                                && py < i32::from(area.height)
-                            {
-                                if let Some(cell) =
-                                    buf.cell_mut((area.x + px as u16, area.y + py as u16))
-                                {
-                                    cell.set_symbol(symbol);
-                                    if symbol == "⬤" {
-                                        cell.set_fg(Color::Indexed(16));
-                                    }
-                                }
-                            } else if !is_shadow {
-                                put(buf, area, px, py, symbol, color);
-                            }
+                            put_text_layer(
+                                buf,
+                                area,
+                                (
+                                    x + col as i32 * scale + dx + offset,
+                                    y + row as i32 * scale + dy + offset,
+                                ),
+                                symbol,
+                                if offset > 0 {
+                                    mix(Color::Black, color, intensity)
+                                } else {
+                                    color
+                                },
+                                offset > 0,
+                            );
                         }
                     }
                 }
             }
         }
     }
+}
+
+fn put_text_layer(
+    buf: &mut Buffer,
+    area: Rect,
+    (x, y): (i32, i32),
+    symbol: &str,
+    color: Color,
+    shadow: bool,
+) {
+    if !shadow {
+        put_color(buf, area, x, y, symbol, color);
+    } else if x >= 0
+        && y >= 0
+        && x < i32::from(area.width)
+        && y < i32::from(area.height)
+        && let Some(cell) = buf.cell_mut((area.x + x as u16, area.y + y as u16))
+    {
+        // Shade the existing lower half/background instead of cutting a black rectangle.
+        let bg = if cell.bg == Color::Reset {
+            Color::Reset
+        } else {
+            mix(cell.bg, Color::Black, 0.4)
+        };
+        cell.set_symbol(symbol).set_fg(color).set_bg(bg);
+    }
+}
+
+fn countdown_cell(name: &str, cell: &Cell) -> bool {
+    let symbol = cell.symbol();
+    match name {
+        "bigtext" | "colossal" | "slant" => symbol != " ",
+        "pie" | "colorwheel" | "sweep" if matches!(symbol, "█" | "░") => true,
+        "circles" | "sine" if matches!(symbol, "●" | "⬤") => true,
+        _ => symbol
+            .chars()
+            .any(|ch| ch.is_ascii_alphanumeric() || matches!(ch, ':' | '|')),
+    }
+}
+
+fn transition_color(source: Color, destination: Color, amount: f64) -> Color {
+    if source == Color::Reset && destination == Color::Reset {
+        Color::Reset
+    } else {
+        mix(source, destination, amount)
+    }
+}
+
+fn feather_cell(source: &mut Cell, destination: &Cell, amount: f64, x: u16, y: u16) {
+    if amount <= 0.0 {
+        return;
+    }
+    if amount >= 1.0 {
+        *source = destination.clone();
+        return;
+    }
+    let fg = transition_color(source.fg, destination.fg, amount);
+    let bg = transition_color(source.bg, destination.bg, amount);
+    // Ordered coverage is stable while paused and chooses only an existing glyph.
+    const COVERAGE: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+    let threshold = (f64::from(COVERAGE[usize::from(y % 4)][usize::from(x % 4)]) + 0.5) / 16.0;
+    if source.symbol() != destination.symbol() && amount > threshold {
+        *source = destination.clone();
+    }
+    source.set_fg(fg).set_bg(bg);
 }
 
 fn trimmed_lines(rendered: &str) -> Vec<Vec<char>> {
@@ -341,4 +449,148 @@ pub fn paused_overlay(buf: &mut Buffer, area: Rect) {
         "PAUSED",
         196,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn text_shadows_keep_and_darken_the_effect_background() {
+        let area = Rect::new(3, 2, 4, 3);
+        let mut buf = Buffer::filled(
+            area,
+            Cell::default().set_bg(Color::Rgb(100, 150, 200)).clone(),
+        );
+        put_text_layer(&mut buf, area, (1, 1), "⬤", Color::Rgb(20, 30, 40), true);
+        let cell = &buf[(4, 3)];
+        assert_eq!(cell.symbol(), "⬤");
+        assert!(
+            matches!(cell.bg, Color::Rgb(r, g, b) if r > 0 && r < 100 && g > 0 && g < 150 && b > 0 && b < 200)
+        );
+        assert_eq!(buf[(3, 2)].bg, Color::Rgb(100, 150, 200));
+    }
+
+    #[test]
+    fn feather_blends_both_channels_and_uses_only_source_glyphs() {
+        for destination_symbol in ["▀", "▄"] {
+            let mut source = Cell::default();
+            source
+                .set_symbol("▀")
+                .set_fg(Color::Rgb(20, 40, 60))
+                .set_bg(Color::Rgb(60, 40, 20));
+            let mut destination = Cell::default();
+            destination
+                .set_symbol(destination_symbol)
+                .set_fg(Color::Rgb(100, 120, 140))
+                .set_bg(Color::Rgb(140, 120, 100));
+            let original = source.clone();
+            feather_cell(&mut source, &destination, 0.0, 2, 3);
+            assert_eq!(source, original);
+            for y in 0..4 {
+                for x in 0..4 {
+                    let mut blended = original.clone();
+                    feather_cell(&mut blended, &destination, 0.25, x, y);
+                    assert_eq!(blended.fg, Color::Rgb(40, 60, 80));
+                    assert_eq!(blended.bg, Color::Rgb(80, 60, 40));
+                    assert!(matches!(blended.symbol(), "▀" | "▄"));
+                    let mut repeated = original.clone();
+                    feather_cell(&mut repeated, &destination, 0.25, x, y);
+                    assert_eq!(blended, repeated);
+                }
+            }
+            feather_cell(&mut source, &destination, 1.0, 2, 3);
+            assert_eq!(source, destination);
+        }
+    }
+
+    #[test]
+    fn feather_preserves_default_background_and_covers_incompatible_glyphs() {
+        let mut source = Cell::default();
+        source.set_symbol("a");
+        let mut destination = Cell::default();
+        destination.set_symbol("b");
+        let mut destination_count = 0;
+        for y in 0..4 {
+            for x in 0..4 {
+                let mut cell = source.clone();
+                feather_cell(&mut cell, &destination, 0.5, x, y);
+                assert_eq!(cell.fg, Color::Reset);
+                assert_eq!(cell.bg, Color::Reset);
+                destination_count += usize::from(cell.symbol() == "b");
+            }
+        }
+        assert_eq!(destination_count, 8);
+    }
+
+    #[test]
+    fn shuffle_keeps_a_complete_countdown_through_the_final_second_and_resize() {
+        let mut renderers = Renderers::new();
+        renderers.order = vec!["bigtext", "slant"];
+        for area in [
+            Rect::new(3, 2, 120, 40),
+            Rect::new(1, 1, 12, 4),
+            Rect::new(2, 3, 80, 24),
+        ] {
+            for elapsed in [8.0, 8.74, 8.75, 9.25, 9.99] {
+                let details = TimerDetails {
+                    elapsed,
+                    duration: 10.0,
+                };
+                let mut actual = Buffer::empty(area);
+                let mut expected = Buffer::empty(area);
+                renderers.render("shuffle", details, area, &mut actual);
+                renderers.render(
+                    if elapsed < 8.75 { "bigtext" } else { "slant" },
+                    details,
+                    area,
+                    &mut expected,
+                );
+                assert!(
+                    actual
+                        .content
+                        .iter()
+                        .zip(&expected.content)
+                        .all(|(a, b)| a.symbol() == b.symbol()),
+                    "countdown broke at {elapsed} in {area:?}"
+                );
+                assert_eq!(renderers.transition.area, area);
+            }
+        }
+    }
+
+    #[test]
+    fn shuffle_keeps_embedded_countdown_labels_together() {
+        let mut renderers = Renderers::new();
+        renderers.order = vec!["bar", "dots"];
+        let area = Rect::new(3, 2, 120, 40);
+        let labels = |buf: &Buffer| -> Vec<_> {
+            buf.content
+                .iter()
+                .enumerate()
+                .filter(|(_, cell)| {
+                    cell.symbol()
+                        .chars()
+                        .any(|ch| ch.is_ascii_alphanumeric() || ch == ':')
+                })
+                .map(|(i, cell)| (i, cell.symbol().to_owned()))
+                .collect()
+        };
+        for elapsed in [8.0, 8.74, 8.75, 9.99] {
+            let details = TimerDetails {
+                elapsed,
+                duration: 10.0,
+            };
+            let mut actual = Buffer::empty(area);
+            let mut expected = Buffer::empty(area);
+            renderers.render("shuffle", details, area, &mut actual);
+            renderers.render(
+                if elapsed < 8.75 { "bar" } else { "dots" },
+                details,
+                area,
+                &mut expected,
+            );
+            assert_eq!(labels(&actual), labels(&expected));
+        }
+    }
 }

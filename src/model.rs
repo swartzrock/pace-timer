@@ -112,3 +112,59 @@ impl Clock {
         self.elapsed(now) >= self.duration
     }
 }
+/// Successful draw completions, including scheduled waiting and terminal I/O.
+#[derive(Default)]
+pub struct FrameRate {
+    completed: std::collections::VecDeque<Instant>,
+    paused: bool,
+}
+
+impl FrameRate {
+    pub fn record(&mut self, now: Instant) {
+        if self.paused
+            || self
+                .completed
+                .back()
+                .is_some_and(|previous| now <= *previous)
+        {
+            return;
+        }
+        self.completed.push_back(now);
+        // Keep the interval straddling the window, even when a draw took over a second.
+        while self.completed.len() > 2
+            && (now.duration_since(self.completed[1]) >= Duration::from_secs(1)
+                || self.completed.len() > 256)
+        {
+            self.completed.pop_front();
+        }
+    }
+
+    pub fn set_paused(&mut self, paused: bool) {
+        if self.paused != paused {
+            self.completed.clear();
+            self.paused = paused;
+        }
+    }
+
+    pub fn rate(&self) -> Option<f64> {
+        if self.paused || self.completed.len() < 2 {
+            return None;
+        }
+        let span = self
+            .completed
+            .back()?
+            .duration_since(*self.completed.front()?)
+            .as_secs_f64();
+        Some((self.completed.len() - 1) as f64 / span)
+    }
+
+    pub fn label(&self) -> String {
+        if self.paused {
+            "FPS paused".into()
+        } else if let Some(rate) = self.rate() {
+            format!("FPS {rate:.1}")
+        } else {
+            "FPS --".into()
+        }
+    }
+}

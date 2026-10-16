@@ -1,5 +1,5 @@
 use pace::{effects::Effects, model::TimerDetails};
-use ratatui::{buffer::Buffer, layout::Rect, style::Color};
+use ratatui::{buffer::Buffer, layout::Rect};
 
 const EFFECTS: [&str; 8] = [
     "bar",
@@ -77,49 +77,103 @@ fn intermediate_frames_do_not_change_animation_phase_or_random_choices() {
     }
 }
 
+fn pixels(buf: &Buffer) -> impl Iterator<Item = &ratatui::buffer::Cell> {
+    buf.content
+        .iter()
+        .filter(|cell| matches!(cell.symbol(), "▀" | "▄"))
+}
+
 #[test]
-fn pie_is_a_strict_radius_disk_with_doubled_columns() {
+fn disks_use_independent_half_samples_and_soft_contours() {
     let mut effects = Effects::new();
-    let buf = draw(&mut effects, "pie", 30.0, Rect::new(0, 0, 40, 20));
-    // radius = floor(min(20,40/2)/2)-2 = 8; chart is 34 by 17.
-    assert_eq!(buf[(3, 1)].symbol(), " ");
-    assert_eq!(buf[(19, 9)].symbol(), "█");
-    for y in 1..18 {
-        for x in (3..37).step_by(2) {
-            assert_eq!(buf[(x, y)], buf[(x + 1, y)]);
-        }
+    for name in ["pie", "sweep", "colorwheel"] {
+        let buf = draw(&mut effects, name, 30.0, Rect::new(0, 0, 40, 20));
+        assert!(pixels(&buf).any(|cell| cell.fg != cell.bg), "{name}");
+        assert_eq!(buf[(0, 0)].symbol(), " ");
+        assert!(pixels(&buf).count() > 40, "{name} disk disappeared");
     }
 }
 
 #[test]
-fn source_symbols_and_progress_colors_are_preserved() {
+fn wheel_moves_before_the_next_legacy_tick() {
     let mut effects = Effects::new();
     let area = Rect::new(0, 0, 80, 30);
-    for (elapsed, color) in [(30.0, 46), (48.0, 154), (57.0, 196)] {
-        let bar = draw(&mut effects, "bar", elapsed, area);
-        assert!(
-            bar.content
-                .iter()
-                .any(|cell| cell.symbol() == "█" && cell.fg == Color::Indexed(color))
+    assert_ne!(
+        draw(&mut effects, "colorwheel", 4.0, area),
+        draw(&mut effects, "colorwheel", 4.016, area)
+    );
+}
+
+#[test]
+fn progress_segments_keep_exact_endpoints_and_fractional_coverage() {
+    let mut effects = Effects::new();
+    let area = Rect::new(0, 0, 80, 30);
+    let empty = draw(&mut effects, "bar", 0.0, area);
+    assert_eq!(
+        empty
+            .content
+            .iter()
+            .filter(|cell| cell.symbol() == "░")
+            .count(),
+        61
+    );
+    let full = draw(&mut effects, "bar", 60.0, area);
+    assert_eq!(
+        full.content
+            .iter()
+            .filter(|cell| cell.symbol() == "█")
+            .count(),
+        61
+    );
+    let mut widths = Vec::new();
+    for fraction in [0.25, 0.5, 0.75] {
+        let buf = draw(&mut effects, "bar", fraction * 60.0 / 61.0, area);
+        let partial = buf
+            .content
+            .iter()
+            .find(|cell| matches!(cell.symbol(), "▏" | "▎" | "▍" | "▌" | "▋" | "▊" | "▉"))
+            .expect("fractional bar cell");
+        widths.push(
+            "▏▎▍▌▋▊▉"
+                .chars()
+                .position(|ch| partial.symbol().starts_with(ch))
+                .unwrap(),
         );
-        assert!(
-            bar.content
-                .iter()
-                .any(|cell| cell.symbol() == "░" && cell.fg == Color::Indexed(239))
-        );
-        let dots = draw(&mut effects, "dots", elapsed, area);
-        assert!(
-            dots.content
-                .iter()
-                .any(|cell| cell.symbol() == "●" && cell.fg == Color::Indexed(color))
-        );
-        assert!(
-            dots.content
-                .iter()
-                .any(|cell| cell.symbol() == "●" && cell.fg == Color::Indexed(232))
-        );
-        assert!(dots.content.iter().any(|cell| cell.symbol() == "╔"));
     }
+    assert!(widths.windows(2).all(|pair| pair[0] < pair[1]));
+    let empty = draw(&mut effects, "dots", 0.0, area);
+    let full = draw(&mut effects, "dots", 60.0, area);
+    assert!(empty.content.iter().any(|cell| cell.symbol() == "○"));
+    assert!(!full.content.iter().any(|cell| cell.symbol() == "○"));
+    let total = empty
+        .content
+        .iter()
+        .filter(|cell| cell.symbol() == "○")
+        .count();
+    assert_eq!(
+        full.content
+            .iter()
+            .filter(|cell| cell.symbol() == "●")
+            .count(),
+        total
+    );
+    let mut shades = Vec::new();
+    for fraction in [0.25, 0.5, 0.75] {
+        let mut buf = draw(&mut effects, "dots", fraction * 60.0 / total as f64, area);
+        pace::color::adapt_buffer(&mut buf, pace::color::OutputPolicy::Monochrome);
+        let partial = buf
+            .content
+            .iter()
+            .find(|cell| matches!(cell.symbol(), "░" | "▒" | "▓"))
+            .expect("fractional dot cell");
+        shades.push(
+            ["░", "▒", "▓"]
+                .iter()
+                .position(|symbol| *symbol == partial.symbol())
+                .unwrap(),
+        );
+    }
+    assert!(shades.windows(2).all(|pair| pair[0] < pair[1]));
 }
 
 #[test]
@@ -150,30 +204,119 @@ fn sine_retains_a_four_second_period_at_sixty_fps() {
 }
 
 #[test]
-fn sine_moves_between_frames_less_than_a_legacy_tick_apart() {
+fn sine_has_shaded_subcell_motion_and_elapsed_derived_trails() {
     let mut effects = Effects::new();
     let area = Rect::new(0, 0, 80, 32);
-    let mut a = Buffer::empty(area);
-    let mut b = Buffer::empty(area);
-    effects.draw(
-        "sine",
-        TimerDetails {
-            elapsed: 4.0,
-            duration: 8.0,
-        },
-        area,
-        &mut a,
+    let a = draw(&mut effects, "sine", 4.0, area);
+    let b = draw(&mut effects, "sine", 4.016, area);
+    assert_ne!(a, b);
+    assert!(pixels(&a).any(|cell| cell.fg != cell.bg));
+    let colors: std::collections::HashSet<_> =
+        pixels(&a).flat_map(|cell| [cell.fg, cell.bg]).collect();
+    assert!(
+        colors.len() > 12,
+        "wave needs shaded edges and faint trail samples"
     );
-    effects.draw(
-        "sine",
-        TimerDetails {
-            elapsed: 4.05,
-            duration: 8.1,
-        },
-        area,
-        &mut b,
+}
+
+#[test]
+fn lava_and_circles_are_continuous_at_generation_boundaries() {
+    let mut effects = Effects::new();
+    let area = Rect::new(0, 0, 80, 30);
+    for name in ["lava", "circles"] {
+        let before = draw(&mut effects, name, 19.9999, area);
+        let after = draw(&mut effects, name, 20.0001, area);
+        let difference: u64 = before
+            .content
+            .iter()
+            .zip(&after.content)
+            .map(|(a, b)| {
+                [a.fg, a.bg]
+                    .into_iter()
+                    .zip([b.fg, b.bg])
+                    .map(|(a, b)| {
+                        let (ar, ag, ab) = pace::color::color_rgb(a).unwrap_or_default();
+                        let (br, bg, bb) = pace::color::color_rgb(b).unwrap_or_default();
+                        u64::from(ar.abs_diff(br))
+                            + u64::from(ag.abs_diff(bg))
+                            + u64::from(ab.abs_diff(bb))
+                    })
+                    .sum::<u64>()
+            })
+            .sum();
+        assert!(
+            difference < 4000,
+            "{name} generation jumped by {difference}"
+        );
+    }
+}
+
+#[test]
+fn disks_preserve_empty_full_states_and_sweep_hand_moves_smoothly() {
+    let mut effects = Effects::new();
+    let area = Rect::new(0, 0, 40, 20);
+    let empty = draw(&mut effects, "pie", 0.0, area);
+    let full = draw(&mut effects, "pie", 60.0, area);
+    assert_eq!(empty[(10, 10)].fg, pace::color::indexed_rgb(233));
+    assert_eq!(full[(10, 10)].fg, pace::color::indexed_rgb(196));
+    assert!(
+        pixels(&full).any(|cell| matches!(cell.fg, ratatui::style::Color::Rgb(1..=254, 0, 0))),
+        "pie contour needs partial coverage"
     );
-    // The 17-row field starts at y=7; this cell is one row above its origin.
-    assert_eq!(a[(0, 14)].symbol(), " ");
-    assert_eq!(b[(0, 14)].symbol(), "•");
+    assert!(pixels(&draw(&mut effects, "sweep", 0.0, area)).count() > 0);
+    assert_eq!(pixels(&draw(&mut effects, "sweep", 60.0, area)).count(), 0);
+    let a = draw(&mut effects, "sweep", 30.0, area);
+    let b = draw(&mut effects, "sweep", 30.016, area);
+    assert!(a != b, "sweep hand must move within a cell");
+}
+
+#[test]
+fn circle_lighting_and_wave_trail_include_faint_samples() {
+    let mut effects = Effects::new();
+    let area = Rect::new(0, 0, 80, 32);
+    let circles = draw(&mut effects, "circles", 5.0, area);
+    let colors: std::collections::HashSet<_> = pixels(&circles)
+        .flat_map(|cell| [cell.fg, cell.bg])
+        .collect();
+    assert!(colors.len() > 30, "circle edges and lighting need shades");
+    let wave = draw(&mut effects, "sine", 4.0, area);
+    // At x=0 the current wave meets its origin; only the earlier phase reaches here.
+    let (r, g, b) = pace::color::color_rgb(wave[(0, 17)].fg).unwrap();
+    assert!(r.max(g).max(b) > 0 && r.max(g).max(b) < 40);
+}
+
+#[test]
+fn resize_and_output_adaptation_preserve_repeatability_and_visible_shapes() {
+    let mut effects = Effects::new();
+    let area = Rect::new(5, 3, 80, 30);
+    for name in EFFECTS {
+        let expected = draw(&mut effects, name, 15.0, area);
+        draw(&mut effects, name, 15.0, Rect::new(9, 7, 14, 7));
+        assert_eq!(
+            expected,
+            draw(&mut effects, name, 15.0, area),
+            "resized {name}"
+        );
+        for policy in [
+            pace::color::OutputPolicy::Ansi256,
+            pace::color::OutputPolicy::Ansi16,
+            pace::color::OutputPolicy::Monochrome,
+        ] {
+            let mut adapted = expected.clone();
+            pace::color::adapt_buffer(&mut adapted, policy);
+            assert!(
+                adapted.content.iter().any(|cell| cell.symbol() != " "),
+                "{name} {policy:?}"
+            );
+            if policy == pace::color::OutputPolicy::Monochrome {
+                assert!(
+                    adapted
+                        .content
+                        .iter()
+                        .all(|cell| cell.fg == ratatui::style::Color::Reset
+                            && cell.bg == ratatui::style::Color::Reset)
+                );
+            }
+        }
+    }
 }

@@ -1,4 +1,7 @@
-use crate::model::RENDERER_NAMES;
+use crate::{
+    color::{ColorDepth, OutputOptions},
+    model::RENDERER_NAMES,
+};
 use std::time::Duration;
 
 #[derive(Debug, PartialEq)]
@@ -14,7 +17,75 @@ pub enum Command {
     Help,
 }
 
-pub fn parse(args: &[String]) -> Result<Command, String> {
+#[derive(Debug, PartialEq)]
+pub struct Parsed {
+    pub command: Command,
+    pub options: OutputOptions,
+}
+
+pub fn parse(args: &[String]) -> Result<Parsed, String> {
+    let mut options = OutputOptions::default();
+    // Preserve the legacy help escape hatch, including otherwise invalid operands.
+    if args.is_empty() || args.iter().any(|s| s == "--help" || s == "-h") || args[0] == "help" {
+        return Ok(Parsed {
+            command: Command::Help,
+            options,
+        });
+    }
+    let mut operands = Vec::new();
+    let mut depth_seen = false;
+    let mut index = 0;
+    while index < args.len() {
+        let arg = args[index].as_str();
+        if arg == "--no-color" {
+            if options.no_color {
+                return Err("Repeated --no-color".into());
+            }
+            options.no_color = true;
+        } else if arg == "--show-fps" {
+            if options.show_fps {
+                return Err("Repeated --show-fps".into());
+            }
+            options.show_fps = true;
+        } else if arg == "--color-depth" || arg.starts_with("--color-depth=") {
+            if depth_seen {
+                return Err("Repeated --color-depth".into());
+            }
+            depth_seen = true;
+            let value = if let Some(value) = arg.strip_prefix("--color-depth=") {
+                value
+            } else {
+                index += 1;
+                args.get(index)
+                    .map(String::as_str)
+                    .ok_or("Missing --color-depth value")?
+            };
+            options.color_depth = match value {
+                "auto" => ColorDepth::Auto,
+                "truecolor" => ColorDepth::Truecolor,
+                "256" => ColorDepth::Ansi256,
+                "16" => ColorDepth::Ansi16,
+                _ => {
+                    return Err(format!(
+                        "Invalid --color-depth '{value}'; choose auto, truecolor, 256, or 16"
+                    ));
+                }
+            };
+        } else if arg.starts_with('-') && arg != "--version" {
+            return Err(format!("Unknown option '{arg}'"));
+        } else {
+            operands.push(args[index].clone());
+        }
+        index += 1;
+    }
+    let command = parse_command(&operands)?;
+    if options.show_fps && !matches!(command, Command::Timer { .. }) {
+        return Err("--show-fps is only supported for timers".into());
+    }
+    Ok(Parsed { command, options })
+}
+
+fn parse_command(args: &[String]) -> Result<Command, String> {
     if args.is_empty() || args.iter().any(|s| s == "--help" || s == "-h") || args[0] == "help" {
         return Ok(Command::Help);
     }
@@ -92,7 +163,7 @@ pub fn parse_duration(input: &str) -> Result<Duration, String> {
 
 pub fn help() -> String {
     format!(
-        "Pace — visual countdown timer\n\nUSAGE\n  pace [timer] DURATION [RENDERER]\n  pace DURATION:RENDERER\n  pace tools <preview|allfonts|colorblocks|version>\n\nDURATION\n  Minutes and seconds: 5m, 3m10s, 30s, 2.5m\n\nRENDERERS\n  {}\n  Default: shuffle (switches every 10 seconds)\n\nCONTROLS\n  Space: pause/resume    Ctrl-C: exit\n\nEXAMPLES\n  pace 5m pie\n  pace timer 2.5m lava\n  pace 3m10s:shuffle\n  pace tools preview\n",
+        "Pace — visual countdown timer\n\nUSAGE\n  pace [timer] DURATION [RENDERER]\n  pace DURATION:RENDERER\n  pace tools <preview|allfonts|colorblocks|version>\n\nDURATION\n  Minutes and seconds: 5m, 3m10s, 30s, 2.5m\n\nRENDERERS\n  {}\n  Default: shuffle (switches every 10 seconds)\n\nOPTIONS\n  --color-depth auto|truecolor|256|16  Output color depth (default: auto)\n  --no-color                          Disable color, including explicit depth\n  --show-fps                          Show delivered frame rate (timers only)\n  Flags may precede or follow operands; each flag may appear once.\n  Auto honors nonempty NO_COLOR; explicit depth overrides it and enables color in pipes.\n  Auto uses TERM/COLORTERM hints; SSH/tmux context alone does not prove RGB support.\n\nCONTROLS\n  Space: pause/resume    Ctrl-C: exit\n\nEXAMPLES\n  pace 5m pie\n  pace timer 2.5m lava\n  pace 3m10s:shuffle\n  pace tools preview\n  pace 1m lava --show-fps --color-depth truecolor\n",
         RENDERER_NAMES.join(", ")
     )
 }
@@ -112,7 +183,7 @@ mod tests {
             vec!["3m10s:pie"],
         ] {
             assert_eq!(
-                parse(&args(&values)).unwrap(),
+                parse(&args(&values)).unwrap().command,
                 Command::Timer {
                     duration: Duration::from_secs(190),
                     renderer: "pie".into()
@@ -120,7 +191,7 @@ mod tests {
             );
         }
         assert_eq!(
-            parse(&args(&["2.5m"])).unwrap(),
+            parse(&args(&["2.5m"])).unwrap().command,
             Command::Timer {
                 duration: Duration::from_secs(150),
                 renderer: "shuffle".into()

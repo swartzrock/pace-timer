@@ -329,7 +329,7 @@ fn shuffle_feathers_colors_with_valid_symbols_and_exact_endpoints() {
 
 #[test]
 fn shader_fields_keep_a_readable_clock_in_small_viewports() {
-    for name in ["aurora", "tide"] {
+    for name in ["aurora", "tide", "interference"] {
         for height in [1, 4] {
             let area = Rect::new(0, 0, 12, height);
             let mut buf = Buffer::empty(area);

@@ -64,6 +64,7 @@ impl Effects {
             "lava" => self.lava(details, area, buf),
             "aurora" => aurora(details, area, buf),
             "tide" => tide(details, area, buf),
+            "interference" => interference(details, area, buf),
             _ => {}
         }
     }
@@ -422,6 +423,29 @@ fn tide(details: TimerDetails, area: Rect, buf: &mut Buffer) {
             0.018 + caustic * 0.03 + edge * 0.35,
             0.144 + surface * 0.24 + caustic * 0.16 + edge * 0.87,
             0.216 + surface * 0.33 + caustic * 0.18 + edge,
+        ]
+    });
+}
+
+fn interference(details: TimerDetails, area: Rect, buf: &mut Buffer) {
+    let remaining = 1.0 - details.progress();
+    let time = details.elapsed;
+    sampled_field(area, buf, |u, v, aspect| {
+        if u >= remaining {
+            return [0.0; 3];
+        }
+        let x = (u - 0.5) * aspect * 2.0;
+        let y = (v - 0.5) * 2.0;
+        let first = (x + 0.47).hypot(y - 0.13);
+        let second = (x - 0.5).hypot(y + 0.17);
+        let wave =
+            ((first * 24.0 - time * 0.65).sin() + (second * 24.0 - time * 0.65).sin()) * 0.25 + 0.5;
+        let light = wave.powi(3) * 0.9;
+        let pink = (first - second + 0.5).clamp(0.0, 1.0);
+        [
+            light * (0.19 + pink * 0.72),
+            light * (0.43 - pink * 0.13),
+            light * (0.68 - pink * 0.09),
         ]
     });
 }

@@ -253,7 +253,7 @@ fn shader_fields_are_registered_for_selection_preview_and_shuffle() {
     let output = pace(&["tools", "preview"]);
     assert!(output.status.success());
     let preview = String::from_utf8(output.stdout).unwrap();
-    for name in ["aurora", "tide"] {
+    for name in ["aurora", "tide", "interference"] {
         assert!(PREVIEW_RENDERERS.contains(&name));
         for args in [
             vec!["5m".into(), name.into()],

@@ -23,6 +23,7 @@ pub const PREVIEW_RENDERERS: &[&str] = &[
     "colorwheel",
     "colossal",
     "dots",
+    "interference",
     "lava",
     "sine",
     "slant",
@@ -135,14 +136,14 @@ impl Renderers {
             _ => {
                 self.effects.draw(name, details, area, buf);
                 let (fill, shadow, double) = match name {
-                    "aurora" | "tide" => ("█", " ", false),
+                    "aurora" | "tide" | "interference" => ("█", " ", false),
                     "pie" | "colorwheel" => ("█", "░", false),
                     "sweep" => ("█", " ", false),
                     "circles" | "sine" => ("●", "⬤", true),
                     _ => return,
                 };
                 let gradient: &[u8] = match name {
-                    "aurora" | "tide" => &[15],
+                    "aurora" | "tide" | "interference" => &[15],
                     "pie" => &[123, 159, 153, 147, 141, 135, 129],
                     "colorwheel" => &[255, 15, 159],
                     "sine" => &[51, 45, 39, 33, 27, 21],
@@ -372,7 +373,11 @@ fn countdown_cell(name: &str, cell: &Cell) -> bool {
     let symbol = cell.symbol();
     match name {
         "bigtext" | "colossal" | "slant" => symbol != " ",
-        "aurora" | "tide" if symbol == "█" && cell.fg == Color::Rgb(255, 255, 255) => true,
+        "aurora" | "tide" | "interference"
+            if symbol == "█" && cell.fg == Color::Rgb(255, 255, 255) =>
+        {
+            true
+        }
         "pie" | "colorwheel" | "sweep" if matches!(symbol, "█" | "░") => true,
         "circles" | "sine" if matches!(symbol, "●" | "⬤") => true,
         _ => symbol

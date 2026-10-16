@@ -8,6 +8,7 @@ pub const RENDERER_NAMES: &[&str] = &[
     "colorwheel",
     "colossal",
     "dots",
+    "interference",
     "lava",
     "pie",
     "shuffle",

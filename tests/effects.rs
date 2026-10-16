@@ -1,7 +1,7 @@
 use pace::{effects::Effects, model::TimerDetails};
-use ratatui::{buffer::Buffer, layout::Rect};
+use ratatui::{buffer::Buffer, layout::Rect, style::Color};
 
-const EFFECTS: [&str; 8] = [
+const EFFECTS: [&str; 9] = [
     "bar",
     "pie",
     "dots",
@@ -10,6 +10,7 @@ const EFFECTS: [&str; 8] = [
     "circles",
     "sine",
     "lava",
+    "aurora",
 ];
 
 fn draw(effect: &mut Effects, name: &str, elapsed: f64, area: Rect) -> Buffer {
@@ -319,4 +320,54 @@ fn resize_and_output_adaptation_preserve_repeatability_and_visible_shapes() {
             }
         }
     }
+}
+
+#[test]
+fn aurora_retreats_from_right_to_left_and_clears_at_completion() {
+    let mut effects = Effects::new();
+    let area = Rect::new(0, 0, 80, 30);
+    let start = draw(&mut effects, "aurora", 0.0, area);
+    let half = draw(&mut effects, "aurora", 30.0, area);
+    let visible =
+        |cell: &ratatui::buffer::Cell| cell.symbol() != " " && cell.fg != Color::Indexed(16);
+    assert!((40..80).any(|x| (0..30).any(|y| visible(&start[(x, y)]))));
+    assert!((0..40).any(|x| (0..30).any(|y| visible(&half[(x, y)]))));
+    assert!((40..80).all(|x| (0..30).all(|y| !visible(&half[(x, y)]))));
+    for details in [
+        TimerDetails {
+            elapsed: 60.0,
+            duration: 60.0,
+        },
+        TimerDetails {
+            elapsed: 65.0,
+            duration: 60.0,
+        },
+        TimerDetails {
+            elapsed: 0.0,
+            duration: 0.0,
+        },
+    ] {
+        let mut buf = Buffer::empty(area);
+        effects.draw("aurora", details, area, &mut buf);
+        assert!(!buf.content.iter().any(visible));
+    }
+}
+
+#[test]
+fn aurora_moves_between_frames_at_fixed_countdown_progress() {
+    let mut effects = Effects::new();
+    let area = Rect::new(0, 0, 100, 40);
+    let mut frames = [Buffer::empty(area), Buffer::empty(area)];
+    for (buf, elapsed) in frames.iter_mut().zip([10.0, 10.05]) {
+        effects.draw(
+            "aurora",
+            TimerDetails {
+                elapsed,
+                duration: elapsed * 2.0,
+            },
+            area,
+            buf,
+        );
+    }
+    assert_ne!(frames[0], frames[1]);
 }

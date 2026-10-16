@@ -62,6 +62,7 @@ impl Effects {
             "circles" => self.circles(details, area, buf),
             "sine" => sine(details, area, buf),
             "lava" => self.lava(details, area, buf),
+            "aurora" => aurora(details, area, buf),
             _ => {}
         }
     }
@@ -367,6 +368,63 @@ fn bilinear(map: &[f64], size: usize, x: f64, y: f64) -> f64 {
     let lower =
         map[bottom * size + left] * (1.0 - x.fract()) + map[bottom * size + right] * x.fract();
     upper * (1.0 - y.fract()) + lower * y.fract()
+}
+
+fn aurora(details: TimerDetails, area: Rect, buf: &mut Buffer) {
+    let remaining = 1.0 - details.progress();
+    let time = details.elapsed;
+    sampled_field(area, buf, |u, v, aspect| {
+        if u >= remaining {
+            return [0.0; 3];
+        }
+        let x = (u - 0.5) * aspect * 2.0;
+        let y = (v - 0.5) * 2.0;
+        let fold = (x * 2.1 + time * 0.13).sin() * 0.18 + (x * 3.9 - time * 0.1).sin() * 0.09;
+        let rays = (0.5 + 0.5 * (x * 18.0 + (x * 2.0 + time * 0.2).sin() * 3.0).sin()).powi(2);
+        let light = (-(y - 0.18 - fold).abs() * 5.5).exp() * (0.3 + rays * 0.7);
+        let mint = ((y + 0.15) * 1.8).clamp(0.0, 1.0);
+        [
+            light * (0.3 - mint * 0.14),
+            light * (0.17 + mint * 0.77),
+            light * (0.7 - mint * 0.11),
+        ]
+    });
+}
+
+fn sampled_field(area: Rect, buf: &mut Buffer, sample: impl Fn(f64, f64, f64) -> [f64; 3]) {
+    if area.is_empty() {
+        return;
+    }
+    let width = f64::from(area.width);
+    let height = f64::from(area.height);
+    let aspect = width / (height * 2.0);
+    for row in 0..area.height {
+        let v = 1.0 - (f64::from(row) + 0.5) / height;
+        for col in 0..area.width {
+            let u = (f64::from(col) + 0.5) / width;
+            let rgb = sample(u, v, aspect);
+            // Nearest levels in the terminal's 6x6x6 indexed-color cube.
+            let levels = rgb.map(|channel| {
+                let channel = channel.clamp(0.0, 1.0) * 255.0;
+                if channel < 47.5 {
+                    0
+                } else if channel < 115.0 {
+                    1
+                } else {
+                    ((channel - 115.0) / 40.0).floor() as u8 + 2
+                }
+            });
+            let color = 16 + levels[0] * 36 + levels[1] * 6 + levels[2];
+            put_color(
+                buf,
+                area,
+                i32::from(col),
+                i32::from(row),
+                if color == 16 { " " } else { "█" },
+                Color::Indexed(color),
+            );
+        }
+    }
 }
 
 fn reflected(start: f64, velocity: f64, elapsed: f64, limit: f64) -> f64 {

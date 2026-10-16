@@ -77,6 +77,14 @@ and soft shadows. Shuffle feathers backgrounds while keeping one complete countd
 
 ![Static RGB buffer previews of all twelve renderers](docs/visuals/renderer-preview.png)
 
+New renderer: `aurora` (Aurora Veil) draws mint and violet light curtains that
+retreat from right to left as time runs out. It is included in preview and
+shuffle, and uses indexed-color terminal cells without a GPU or extra runtime.
+
+```sh
+cargo run --release -- 5m aurora
+```
+
 ```sh
 cargo run --release -- tools preview
 cargo run --release -- tools allfonts

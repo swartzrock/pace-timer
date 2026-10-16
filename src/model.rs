@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 pub const RENDERER_NAMES: &[&str] = &[
+    "aurora",
     "bar",
     "bigtext",
     "circles",

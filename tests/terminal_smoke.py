@@ -62,12 +62,12 @@ class Timer:
 
 def main():
     executable = str(pathlib.Path(sys.argv[1]).resolve())
-    renderers = ["bar", "bigtext", "circles", "colorwheel", "colossal", "dots", "lava", "pie", "shuffle", "sine", "slant", "sweep"]
+    renderers = ["aurora", "bar", "bigtext", "circles", "colorwheel", "colossal", "dots", "lava", "pie", "shuffle", "sine", "slant", "sweep"]
     for renderer in renderers:
         timer = Timer(executable, "0.12s", renderer)
         elapsed = timer.finish()
         assert elapsed < 1.5, (renderer, elapsed)
-    print("PASS: all 12 renderers complete and restore terminal modes")
+    print(f"PASS: all {len(renderers)} renderers complete and restore terminal modes")
 
     timer = Timer(executable, "timer", "0.8s", "sine")
     timer.drain(0.2)

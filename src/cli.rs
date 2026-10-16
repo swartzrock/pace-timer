@@ -42,12 +42,7 @@ pub fn parse(args: &[String]) -> Result<Parsed, String> {
     let mut index = 0;
     while index < args.len() {
         let arg = args[index].as_str();
-        if arg == "--no-color" {
-            if options.no_color {
-                return Err("Repeated --no-color".into());
-            }
-            options.no_color = true;
-        } else if arg == "--show-fps" {
+        if arg == "--show-fps" {
             if options.show_fps {
                 return Err("Repeated --show-fps".into());
             }
@@ -70,9 +65,10 @@ pub fn parse(args: &[String]) -> Result<Parsed, String> {
                 "truecolor" => ColorDepth::Truecolor,
                 "256" => ColorDepth::Ansi256,
                 "16" => ColorDepth::Ansi16,
+                "1" => ColorDepth::Monochrome,
                 _ => {
                     return Err(format!(
-                        "Invalid --color-depth '{value}'; choose auto, truecolor, 256, or 16"
+                        "Invalid --color-depth '{value}'; choose auto, truecolor, 256, 16, or 1"
                     ));
                 }
             };
@@ -181,9 +177,8 @@ TOOLS
 {TOOL_DESCRIPTIONS}
 
 OUTPUT
-  --color-depth auto|truecolor|256|16  Choose the output color depth
-  --no-color                          Disable color
-  Redirected output is monochrome by default; use an explicit depth to keep colors.
+  --color-depth auto|truecolor|256|16|1  Colors (default: auto; 1: monochrome)
+  Redirected output is monochrome by default.
 
 EXAMPLES
   pace tools preview
@@ -209,11 +204,10 @@ RENDERERS
   Default: shuffle (switches every 10 seconds)
 
 OPTIONS
-  --help, -h                          Show help
-  --version                           Print the Pace version
-  --color-depth auto|truecolor|256|16  Output color depth (default: auto)
-  --no-color                          Disable color, including explicit depth
-  --show-fps                          Show frame rate in the footer
+  --help, -h                             Show help
+  --version                              Print the Pace version
+  --color-depth auto|truecolor|256|16|1  Colors (default: auto; 1: monochrome)
+  --show-fps                             Show frame rate in the footer
   Flags may precede or follow operands; each flag may appear once.
 
 CONTROLS

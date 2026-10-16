@@ -95,7 +95,7 @@ def main():
     timer.finish()
     print("PASS: SIGTERM restores terminal")
 
-    timer = Timer(executable, "3s", "sine", "--show-fps", "--no-color")
+    timer = Timer(executable, "3s", "sine", "--show-fps", "--color-depth", "1")
     timer.drain(0.25)
     # The diff backend may encode the label's separating space as cursor movement.
     assert b"FPS" in timer.output and b"--" in timer.output, "FPS warmup not displayed"
@@ -131,10 +131,10 @@ def main():
         else:
             assert not re.search(rb"(?:38|48);[25];", timer.output), "16-color output used extended SGR"
             assert re.search(rb"\x1b\[(?:[0-9]+;)*(?:3[0-7]|9[0-7])(?:;[0-9]+)*m", timer.output), "basic ANSI color absent"
-    timer = Timer(executable, "0.12s", "pie", "--color-depth", "truecolor", "--no-color",
-                  environment={"NO_COLOR": "1"})
+    timer = Timer(executable, "0.12s", "pie", "--color-depth", "1",
+                  environment={"NO_COLOR": "", "COLORTERM": "truecolor"})
     timer.finish()
-    assert not re.search(rb"(?:38|48);[25];", timer.output), "--no-color lost precedence"
+    assert not re.search(rb"\x1b\[(?:38|48);|\x1b\[(?:[0-9]+;)*(?:3[0-7]|4[0-7]|9[0-7]|10[0-7])(?:;[0-9]+)*m", timer.output), "--color-depth 1 emitted color"
     print("PASS: actual timer color depth and NO_COLOR override precedence")
 
 

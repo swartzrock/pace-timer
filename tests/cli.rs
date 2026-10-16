@@ -26,17 +26,14 @@ fn help_describes_only_the_simple_timer_interface() {
             "[timer]",
             "DURATION:",
             "pace timer",
+            "--no-color",
         ] {
             assert!(
                 !text.contains(private_or_legacy),
                 "{args:?}: {private_or_legacy}"
             );
         }
-        for option in [
-            "--show-fps",
-            "--no-color",
-            "--color-depth auto|truecolor|256|16",
-        ] {
+        for option in ["--show-fps", "--color-depth auto|truecolor|256|16|1"] {
             assert!(text.contains(option));
         }
     }
@@ -65,7 +62,7 @@ fn help_explains_the_original_typescript_tools() {
 
 #[test]
 fn preview_keeps_the_original_tools_panel_frames() {
-    let output = pace(&["tools", "preview", "--no-color"]);
+    let output = pace(&["tools", "preview", "--color-depth", "1"]);
     assert!(output.status.success());
     let text = String::from_utf8(output.stdout).unwrap();
     let panels = pace::renderers::PREVIEW_RENDERERS.len();
@@ -92,6 +89,7 @@ fn invalid_input_exits_with_a_useful_error_before_terminal_setup() {
         &["1s:pie"],
         &["1s:pie", "bar"],
         &["1s", "pie", "extra"],
+        &["1s", "--no-color"],
         &["tools", "wat"],
         &["tools", "version", "extra"],
     ] {
@@ -207,7 +205,6 @@ fn output_flags_parse_anywhere_and_preserve_timer_operands() {
             parsed.options,
             OutputOptions {
                 color_depth: ColorDepth::Truecolor,
-                no_color: false,
                 show_fps: true
             }
         );
@@ -224,7 +221,7 @@ fn output_flags_parse_anywhere_and_preserve_timer_operands() {
         vec!["1s", "--color-depth="],
         vec!["1s", "--color-depth=8"],
         vec!["1s", "--color-depth=16", "--color-depth=auto"],
-        vec!["1s", "--no-color", "--no-color"],
+        vec!["1s", "--no-color"],
         vec!["1s", "--show-fps", "--show-fps"],
         vec!["1s", "--wat"],
         vec!["tools", "preview", "--show-fps"],
@@ -235,7 +232,7 @@ fn output_flags_parse_anywhere_and_preserve_timer_operands() {
 }
 
 #[test]
-fn every_tool_honors_pipe_explicit_depth_and_no_color() {
+fn every_tool_honors_pipe_and_explicit_color_modes() {
     for tool in ["preview", "allfonts", "colorblocks"] {
         for (flags, expected) in [
             (vec![], "mono"),
@@ -243,7 +240,8 @@ fn every_tool_honors_pipe_explicit_depth_and_no_color() {
             (vec!["--color-depth=truecolor"], "rgb"),
             (vec!["--color-depth=256"], "256"),
             (vec!["--color-depth=16"], "16"),
-            (vec!["--color-depth=truecolor", "--no-color"], "mono"),
+            (vec!["--color-depth=1"], "mono"),
+            (vec!["--color-depth", "1"], "mono"),
         ] {
             let output = Command::new(env!("CARGO_BIN_EXE_pace"))
                 .args(["tools", tool])

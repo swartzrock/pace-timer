@@ -42,18 +42,19 @@ files are not required.
 ./target/release/pace 1m colorwheel --color-depth truecolor
 ./target/release/pace 1m pie --color-depth 256
 ./target/release/pace 1m sine --color-depth 16
-./target/release/pace 1m bigtext --no-color
+./target/release/pace 1m bigtext --color-depth 1
 ```
 
-`--color-depth auto|truecolor|256|16` defaults to `auto`. Auto uses positive
-`COLORTERM=truecolor|24bit` or direct-color `TERM` hints for RGB, a 256-color
-hint for indexed color, recognized ANSI terminals for 16 colors, and otherwise
-monochrome. `TERM=dumb` uses monochrome. SSH and tmux can hide capability hints;
-force a depth when you know the full terminal connection supports it.
+`--color-depth auto|truecolor|256|16|1` defaults to `auto`. Use `1` for monochrome
+output. Auto uses positive `COLORTERM=truecolor|24bit` or direct-color `TERM`
+hints for RGB, a 256-color hint for indexed color, recognized ANSI terminals for
+16 colors, and otherwise monochrome. `TERM=dumb` uses monochrome.
+SSH and tmux can hide capability hints; force a depth when you know the full
+terminal connection supports it.
 
-`--no-color` always wins. Otherwise an explicit non-auto depth wins over
-nonempty `NO_COLOR`. Auto honors `NO_COLOR`. Flags can appear before or after
-operands; each flag may appear once. Both foreground and background use the selected depth.
+An explicit color depth overrides automatic detection and `NO_COLOR`. Auto
+honors `NO_COLOR`. Flags can appear before or after operands; each flag may
+appear once. Both foreground and background use the selected depth.
 
 The muted footer shows elapsed / total time on the left and `Space: pause` or
 `Space: resume` in the center. Shuffle also shows the current renderer and the

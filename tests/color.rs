@@ -65,27 +65,22 @@ fn captured_policy_precedence_and_capabilities() {
         );
     }
     let hostile = environment(Some("dumb"), None, Some("1"));
+    let capable = environment(Some("xterm-256color"), Some("truecolor"), None);
     for (depth, expected) in [
         (ColorDepth::Truecolor, Truecolor),
         (ColorDepth::Ansi256, Ansi256),
         (ColorDepth::Ansi16, Ansi16),
+        (ColorDepth::Monochrome, Monochrome),
     ] {
         let options = OutputOptions {
             color_depth: depth,
             ..defaults
         };
-        assert_eq!(OutputPolicy::resolve(options, false, &hostile), expected);
-        assert_eq!(
-            OutputPolicy::resolve(
-                OutputOptions {
-                    no_color: true,
-                    ..options
-                },
-                true,
-                &hostile
-            ),
-            Monochrome
-        );
+        for env in [&hostile, &capable] {
+            for is_terminal in [false, true] {
+                assert_eq!(OutputPolicy::resolve(options, is_terminal, env), expected);
+            }
+        }
     }
 }
 

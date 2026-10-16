@@ -8,12 +8,12 @@ pub enum ColorDepth {
     Truecolor,
     Ansi256,
     Ansi16,
+    Monochrome,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct OutputOptions {
     pub color_depth: ColorDepth,
-    pub no_color: bool,
     pub show_fps: bool,
 }
 
@@ -46,13 +46,11 @@ pub enum OutputPolicy {
 impl OutputPolicy {
     /// Pure resolution; context such as SSH, tmux, or TERM_PROGRAM is not RGB proof.
     pub fn resolve(options: OutputOptions, is_terminal: bool, env: &ColorEnvironment) -> Self {
-        if options.no_color {
-            return Self::Monochrome;
-        }
         match options.color_depth {
             ColorDepth::Truecolor => return Self::Truecolor,
             ColorDepth::Ansi256 => return Self::Ansi256,
             ColorDepth::Ansi16 => return Self::Ansi16,
+            ColorDepth::Monochrome => return Self::Monochrome,
             ColorDepth::Auto => {}
         }
         if !is_terminal || env.no_color.as_ref().is_some_and(|value| !value.is_empty()) {

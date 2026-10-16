@@ -15,6 +15,7 @@ pub enum Command {
     ColorBlocks,
     Version,
     Help,
+    ToolsHelp,
 }
 
 #[derive(Debug, PartialEq)]
@@ -28,7 +29,11 @@ pub fn parse(args: &[String]) -> Result<Parsed, String> {
     // Preserve the legacy help escape hatch, including otherwise invalid operands.
     if args.is_empty() || args.iter().any(|s| s == "--help" || s == "-h") || args[0] == "help" {
         return Ok(Parsed {
-            command: Command::Help,
+            command: match args {
+                [first, ..] if first == "tools" => Command::ToolsHelp,
+                [first, second, ..] if first == "help" && second == "tools" => Command::ToolsHelp,
+                _ => Command::Help,
+            },
             options,
         });
     }
@@ -93,6 +98,9 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
         return Ok(Command::Version);
     }
     if args[0] == "tools" {
+        if args.len() == 1 {
+            return Ok(Command::ToolsHelp);
+        }
         if args.len() != 2 {
             return Err("Expected: pace tools <preview|allfonts|colorblocks|version>".into());
         }
@@ -161,9 +169,79 @@ pub fn parse_duration(input: &str) -> Result<Duration, String> {
     Duration::try_from_secs_f64(seconds).map_err(|_| invalid())
 }
 
+const TOOL_DESCRIPTIONS: &str =
+    "  preview      Preview all renderers in framed pairs (excluding shuffle)
+  allfonts     Display FIGlet font samples and timer widths
+  colorblocks  Display color gradients and palettes
+  version      Print the Pace version";
+
+pub fn tools_help() -> String {
+    format!(
+        "Pace tools — explore renderers, fonts, and colors
+
+USAGE
+  pace tools <preview|allfonts|colorblocks|version>
+
+TOOLS
+{TOOL_DESCRIPTIONS}
+
+OUTPUT
+  --color-depth auto|truecolor|256|16  Choose the output color depth
+  --no-color                          Disable color
+  Redirected output is monochrome by default; use an explicit depth to keep colors.
+
+EXAMPLES
+  pace tools preview
+  pace tools allfonts
+  pace tools colorblocks --color-depth 256
+  pace tools version
+"
+    )
+}
+
 pub fn help() -> String {
     format!(
-        "Pace — visual countdown timer\n\nUSAGE\n  pace [timer] DURATION [RENDERER]\n  pace DURATION:RENDERER\n  pace tools <preview|allfonts|colorblocks|version>\n\nDURATION\n  Minutes and seconds: 5m, 3m10s, 30s, 2.5m\n\nRENDERERS\n  {}\n  Default: shuffle (switches every 10 seconds)\n\nOPTIONS\n  --color-depth auto|truecolor|256|16  Output color depth (default: auto)\n  --no-color                          Disable color, including explicit depth\n  --show-fps                          Show delivered frame rate (timers only)\n  Flags may precede or follow operands; each flag may appear once.\n  Auto honors nonempty NO_COLOR; explicit depth overrides it and enables color in pipes.\n  Auto uses TERM/COLORTERM hints; SSH/tmux context alone does not prove RGB support.\n\nCONTROLS\n  Space: pause/resume    Ctrl-C: exit\n\nEXAMPLES\n  pace 5m pie\n  pace timer 2.5m lava\n  pace 3m10s:shuffle\n  pace tools preview\n  pace 1m lava --show-fps --color-depth truecolor\n",
+        "Pace — visual countdown timer
+
+USAGE
+  pace [timer] DURATION [RENDERER]
+  pace DURATION:RENDERER
+  pace tools [TOOL]
+
+DURATION
+  Minutes and seconds: 5m, 3m10s, 30s, 2.5m
+
+RENDERERS
+  {}
+  Default: shuffle (switches every 10 seconds)
+
+TOOLS
+{TOOL_DESCRIPTIONS}
+  Run 'pace tools' or 'pace help tools' for tool usage and examples.
+
+OPTIONS
+  --help, -h                          Show help
+  --version                           Print the Pace version
+  --color-depth auto|truecolor|256|16  Output color depth (default: auto)
+  --no-color                          Disable color, including explicit depth
+  --show-fps                          Show delivered frame rate (timers only)
+  Flags may precede or follow operands; each flag may appear once.
+  Auto honors nonempty NO_COLOR; explicit depth overrides it and enables color in pipes.
+  Auto uses TERM/COLORTERM hints; SSH/tmux context alone does not prove RGB support.
+
+CONTROLS
+  Space: pause/resume    Ctrl-C: exit
+
+EXAMPLES
+  pace 5m pie
+  pace timer 2.5m lava
+  pace 3m10s:shuffle
+  pace tools preview
+  pace tools allfonts
+  pace tools colorblocks
+  pace tools version
+  pace 1m lava --show-fps --color-depth truecolor
+",
         RENDERER_NAMES.join(", ")
     )
 }

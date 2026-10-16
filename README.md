@@ -93,7 +93,18 @@ cargo run --release -- 5m tide
 cargo run --release -- 5m interference
 ```
 
+All four TypeScript tools are available. Run `pace tools` or `pace help tools`
+for their usage:
+
+| Command | Output |
+| --- | --- |
+| `pace tools preview` | Framed previews of every renderer except shuffle, in pairs |
+| `pace tools allfonts` | All 289 FIGlet fonts, the sample `23 Quick foxes`, and maximum timer widths |
+| `pace tools colorblocks` | The original single/double gradients and named color palettes |
+| `pace tools version` | The current Pace version |
+
 ```sh
+cargo run --release -- tools
 cargo run --release -- tools preview
 cargo run --release -- tools allfonts
 cargo run --release -- tools colorblocks

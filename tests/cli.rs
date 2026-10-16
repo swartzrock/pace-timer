@@ -28,6 +28,41 @@ fn help_lists_every_original_renderer_and_tools() {
 }
 
 #[test]
+fn help_explains_the_original_typescript_tools() {
+    for args in [
+        vec![],
+        vec!["--help"],
+        vec!["tools"],
+        vec!["tools", "--help"],
+        vec!["help", "tools"],
+    ] {
+        let output = pace(&args);
+        assert!(output.status.success(), "{args:?}");
+        let text = String::from_utf8(output.stdout).unwrap();
+        for description in [
+            "Preview all renderers",
+            "FIGlet font samples and timer widths",
+            "color gradients and palettes",
+            "Print the Pace version",
+        ] {
+            assert!(text.contains(description), "{args:?}: {description}");
+        }
+    }
+}
+
+#[test]
+fn preview_keeps_the_original_tools_panel_frames() {
+    let output = pace(&["tools", "preview", "--no-color"]);
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    let panels = pace::renderers::PREVIEW_RENDERERS.len();
+    for corner in ['┌', '┐', '└', '┘'] {
+        assert_eq!(text.matches(corner).count(), panels, "missing {corner}");
+    }
+    assert!(text.contains('│'));
+}
+
+#[test]
 fn version_tool_runs_without_a_terminal() {
     let output = pace(&["tools", "version"]);
     assert!(output.status.success());

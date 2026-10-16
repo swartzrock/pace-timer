@@ -84,8 +84,10 @@ in a 24-bit-color terminal and are included in preview and shuffle:
 - `aurora` (Aurora Veil): mint and violet light curtains retreat from right to left.
 - `tide`: an ocean recedes with broad horizontal swells and a little foam along
   the waterline.
-- `interference` (Interference Field): blue and pink ripples from two sources
-  settle from right to left as time runs out.
+- `interference` (Interference Field): ripples from two sources settle from right
+  to left as time runs out. It opens in blue and pink, then changes among six
+  color pairs in a shuffled order every 10 seconds of active time, with a
+  2.5-second crossfade from the top left to the bottom right.
 
 ```sh
 cargo run --release -- 5m aurora

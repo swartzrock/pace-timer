@@ -204,13 +204,13 @@ RENDERERS
   {}
   Default: shuffle (switches every 10 seconds)
 
-FLAGS
-  --help, -h  Show help
-  --version   Print the Pace version
-  --show-fps  Show frame rate in the footer
-
 OPTIONS
+  --show-fps                           Show frame rate in the footer
   --color-depth auto|truecolor|256|16|1  Colors (default: auto; 1: monochrome)
+
+INFORMATION
+  --help, -h  Print help and exit
+  --version   Print the Pace version and exit
 
 CONTROLS
   Space: pause/resume    Ctrl-C: exit

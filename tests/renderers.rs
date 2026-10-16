@@ -83,11 +83,14 @@ fn shuffle_uses_ten_second_slots_and_a_two_and_a_half_second_transition() {
             },
         )
     };
-    assert!(status(0.0).contains("10 more seconds"));
-    assert!(status(7.5).contains("showing"));
-    assert!(status(8.0).contains("loading"));
-    assert!(status(10.0).contains("10 more seconds"));
-    assert_ne!(status(0.0), status(10.0));
+    let current = status(0.0);
+    let next = status(10.0);
+    assert!(RENDERER_NAMES.contains(&current.as_str()));
+    assert!(RENDERER_NAMES.contains(&next.as_str()));
+    assert_eq!(status(7.49), current);
+    assert_eq!(status(7.5), format!("{current} -> {next}"));
+    assert_eq!(status(8.0), format!("{current} -> {next}"));
+    assert_ne!(current, next);
 }
 
 #[test]
@@ -278,8 +281,8 @@ fn shuffle_feathers_colors_with_valid_symbols_and_exact_endpoints() {
                     duration: 600.0,
                 },
             )
-            .split('"')
-            .nth(1)
+            .split_whitespace()
+            .next()
             .unwrap()
             .to_owned()
     };

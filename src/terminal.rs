@@ -1,7 +1,6 @@
 use crate::{
     color::{OutputPolicy, adapt_buffer},
-    graphics::centered_text,
-    model::{Clock, FrameRate, FrameSchedule, TimerDetails},
+    model::{Clock, FrameRate, FrameSchedule, TimerDetails, format_time},
     output::OutputBackend,
     renderers::{Renderers, paused_overlay},
 };
@@ -277,14 +276,25 @@ fn compose(
     area: Rect,
     buf: &mut Buffer,
 ) {
-    let status = renderers.status(name, details);
-    let fps = fps.filter(|label| label.len() <= usize::from(area.width) && area.height > 1);
+    let elapsed = details.elapsed_text();
+    let compact = format!("{elapsed} / {}", format_time(details.duration as u64));
+    let fps = fps.filter(|label| {
+        area.height > 1
+            && label.len() <= usize::from(area.width)
+            && (compact.len() > usize::from(area.width)
+                || compact.len() + label.len() < usize::from(area.width))
+    });
     let status_width = fps.map_or(area.width, |label| {
         area.width.saturating_sub(label.len() as u16 + 1)
     });
-    let show_status =
-        area.height > 1 && status_width >= 8 && (details.elapsed < 7.0 || !status.is_empty());
-    let show_footer = show_status || fps.is_some();
+    let show_prefix = compact.len() + 8 <= usize::from(status_width);
+    let timeline = if show_prefix {
+        format!("Elapsed {compact}")
+    } else {
+        compact
+    };
+    let show_time = timeline.len() <= usize::from(status_width);
+    let show_footer = area.height > 1 && (show_time || fps.is_some());
     let content = Rect {
         height: area.height.saturating_sub(u16::from(show_footer)),
         ..area
@@ -293,42 +303,53 @@ fn compose(
     if paused {
         paused_overlay(buf, content);
     }
-    if show_footer {
-        let y = area.bottom() - 1;
-        let bg = if details.elapsed < 3.5 {
-            234
-        } else {
-            // The grayscale ramp ends at 232; 231 is white in the color cube.
-            234 - (((details.elapsed - 3.5) / 3.5) * 3.0).clamp(0.0, 2.0) as u8
-        };
-        for x in area.x..area.right() {
-            buf[(x, y)]
-                .set_symbol(" ")
-                .set_style(Style::default().bg(Color::Indexed(bg)));
-        }
-        if show_status {
-            let message = if status.is_empty() {
-                format!(
-                    "Starting a {} timer with the '{name}' renderer. Press <space> to pause.",
-                    crate::model::format_time(details.duration as u64)
-                )
-            } else {
-                status
-            };
-            let clipped: String = message.chars().take(usize::from(status_width)).collect();
-            centered_text(buf, Rect::new(area.x, y, status_width, 1), 0, &clipped, 117);
-        }
-        if let Some(label) = fps {
-            let x = area.right() - label.len() as u16;
-            crate::graphics::text(
-                buf,
-                Rect::new(x, y, label.len() as u16, 1),
-                0,
-                0,
-                label,
-                250,
-            );
-        }
+    if !show_footer {
+        return;
+    }
+    let y = area.bottom() - 1;
+    let style = Style::reset()
+        .fg(Color::Rgb(138, 138, 138))
+        .bg(Color::Rgb(20, 20, 20));
+    for x in area.x..area.right() {
+        buf[(x, y)].set_symbol(" ").set_style(style);
+    }
+    let middle_left = if show_time {
+        buf.set_string(area.x, y, &timeline, style);
+        buf.set_string(
+            area.x + if show_prefix { 8 } else { 0 },
+            y,
+            &elapsed,
+            style.fg(Color::Rgb(176, 176, 176)),
+        );
+        area.x + timeline.len() as u16 + 1
+    } else {
+        area.x
+    };
+    let middle_right = area.x + status_width;
+    let middle_width = middle_right.saturating_sub(middle_left);
+    let status = renderers.status(name, details);
+    let hint = if paused {
+        "Space: resume"
+    } else {
+        "Space: pause"
+    };
+    let message = if status.is_empty() {
+        hint.to_owned()
+    } else {
+        format!("{status} | {hint}")
+    };
+    let message = if message.len() <= usize::from(middle_width) {
+        message
+    } else {
+        status
+    };
+    if !message.is_empty() && message.len() <= usize::from(middle_width) {
+        let x = (area.x + (area.width - message.len() as u16) / 2)
+            .clamp(middle_left, middle_right - message.len() as u16);
+        buf.set_string(x, y, message, style);
+    }
+    if let Some(label) = fps {
+        buf.set_string(area.right() - label.len() as u16, y, label, style);
     }
 }
 
@@ -366,6 +387,59 @@ mod tests {
     }
 
     #[test]
+    fn footer_keeps_elapsed_total_controls_and_muted_colors_visible() {
+        let area = Rect::new(3, 2, 120, 24);
+        let mut renderers = Renderers::new();
+        for elapsed in [0.0, 17.0, 59.0, 60.0] {
+            for paused in [false, true] {
+                for fps in [None, Some("FPS 60.0")] {
+                    let mut buf = Buffer::empty(Rect::new(0, 0, 130, 30));
+                    let details = TimerDetails {
+                        elapsed,
+                        duration: 60.0,
+                    };
+                    compose(
+                        &mut renderers,
+                        "interference",
+                        details,
+                        paused,
+                        fps,
+                        area,
+                        &mut buf,
+                    );
+                    let y = area.bottom() - 1;
+                    let footer: String = (area.x..area.right())
+                        .map(|x| buf[(x, y)].symbol())
+                        .collect();
+                    assert!(
+                        footer.starts_with(&format!("Elapsed {} / 1:00", details.elapsed_text()))
+                    );
+                    let hint = if paused {
+                        "Space: resume"
+                    } else {
+                        "Space: pause"
+                    };
+                    let hint_x = area.x + (area.width - hint.len() as u16) / 2;
+                    assert!(footer.contains(hint));
+                    assert_eq!(buf[(hint_x, y)].symbol(), "S");
+                    assert!(!footer.contains("Starting") && !footer.contains("interference"));
+                    assert_eq!(footer.contains("FPS"), fps.is_some());
+                    if let Some(label) = fps {
+                        assert!(footer.ends_with(label));
+                    }
+                    for x in area.x..area.right() {
+                        assert_eq!(buf[(x, y)].bg, Color::Rgb(20, 20, 20));
+                    }
+                    assert_eq!(buf[(area.x, y)].fg, Color::Rgb(138, 138, 138));
+                    assert_eq!(buf[(area.x + 8, y)].fg, Color::Rgb(176, 176, 176));
+                    assert_eq!(buf[(hint_x, y)].fg, Color::Rgb(138, 138, 138));
+                    assert_eq!(buf[(area.right() - 1, y)].fg, Color::Rgb(138, 138, 138));
+                }
+            }
+        }
+    }
+
+    #[test]
     fn fps_footer_is_right_aligned_and_keeps_countdown_in_content() {
         for width in [1, 8, 12, 80] {
             for height in [1, 2, 24] {
@@ -387,10 +461,13 @@ mod tests {
                     let last: String = (area.x..area.right())
                         .map(|x| buf[(x, area.bottom() - 1)].symbol())
                         .collect();
-                    if height > 1 && label.len() <= usize::from(width) {
+                    if height > 1 && (width == 80 || (width == 8 && label.len() <= 8)) {
                         assert!(last.ends_with(label), "{area:?}: {last:?}");
                     } else {
                         assert!(!last.contains("FPS"));
+                    }
+                    if height > 1 && width == 12 {
+                        assert!(last.starts_with("0:00 / 0:05"), "{area:?}: {last:?}");
                     }
                     if width == 12 && height <= 2 {
                         let text: String = buf.content.iter().map(|cell| cell.symbol()).collect();

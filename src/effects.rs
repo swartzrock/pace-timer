@@ -1,6 +1,6 @@
 use std::f64::consts::{PI, TAU};
 
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
 use ratatui::{buffer::Buffer, layout::Rect, style::Color};
 
 use crate::{
@@ -18,6 +18,14 @@ const LAVA_GRADIENTS: &[&[u8]] = &[
     &[16, 52, 88, 124, 160, 196, 202, 208, 214, 220, 226, 230],
     &[16, 52, 88, 124, 160, 196, 202, 208, 214, 215, 216, 223],
     &[16, 52, 88, 94, 130, 166, 172, 208, 214, 220, 226, 230],
+];
+const INTERFERENCE_PALETTES: [[[f64; 3]; 2]; 6] = [
+    [[0.06, 0.32, 0.95], [0.96, 0.10, 0.53]],
+    [[0.015, 0.65, 0.38], [1.0, 0.42, 0.025]],
+    [[0.44, 0.045, 0.95], [0.95, 0.82, 0.04]],
+    [[0.95, 0.035, 0.08], [0.025, 0.70, 0.95]],
+    [[0.035, 0.68, 0.19], [0.70, 0.22, 0.95]],
+    [[1.0, 0.20, 0.025], [0.02, 0.28, 0.95]],
 ];
 
 pub struct Effects {
@@ -64,7 +72,7 @@ impl Effects {
             "lava" => self.lava(details, area, buf),
             "aurora" => aurora(details, area, buf),
             "tide" => tide(details, area, buf),
-            "interference" => interference(details, area, buf),
+            "interference" => interference(details, area, buf, self.epoch_rng(0, 2)),
             _ => {}
         }
     }
@@ -410,7 +418,7 @@ fn tide(details: TimerDetails, area: Rect, buf: &mut Buffer) {
             return [0.0; 3];
         }
         let x = (u - 0.5) * aspect * 2.0;
-        let wave = ((x * 5.0 + time * 0.7).sin() + (x * 8.0 - time * 0.5).sin())
+        let wave = ((x * 2.0 + time * 0.7).sin() + (x * 3.5 - time * 0.5).sin())
             * 0.012
             * (PI * remaining).sin();
         let level = remaining + wave;
@@ -419,27 +427,28 @@ fn tide(details: TimerDetails, area: Rect, buf: &mut Buffer) {
         }
         let depth = level - v;
         let surface = (-depth * 3.0).exp();
-        let warp = (x * 2.5 + v * 4.0 + time * 0.15).sin() * 0.7
-            + (x * 4.0 - v * 3.0 - time * 0.1).cos() * 0.3;
-        let network = (x * 14.0 + v * 10.0 + warp * 3.0 + time * 0.3).sin()
-            * (x * 6.0 - v * 12.0 + warp * 2.0 - time * 0.15).sin();
-        let caustic = (1.0 - network.abs()).powi(12) * (-depth * 1.4).exp();
-        let edge = if remaining < 1.0 {
-            (-depth * 140.0).exp() * 0.35
-        } else {
-            0.0
-        };
+        // Shallow bends keep the swell horizontal, like long ocean wave fronts.
+        let bend = (x * 0.9 + time * 0.12).sin() * 0.35;
+        let swell = (0.5 + 0.5 * (v * TAU * 5.0 - time * 0.8 + bend).sin()).powi(3);
+        let crest = (0.5 + 0.5 * (x * 7.0 - time * 0.45).sin()).powi(3);
+        let foam = (-depth * 100.0).exp() * crest;
         [
-            0.006 + caustic * 0.08 + edge * 0.45,
-            0.035 + surface * 0.28 + caustic * 0.27 + edge * 0.8,
-            0.14 + surface * 0.3 + caustic * 0.34 + edge,
+            0.004 + swell * 0.012 + foam * 0.75,
+            0.035 + surface * 0.12 + swell * 0.1 + foam * 0.8,
+            0.12 + surface * 0.16 + swell * 0.16 + foam * 0.8,
         ]
     });
 }
 
-fn interference(details: TimerDetails, area: Rect, buf: &mut Buffer) {
+fn interference(details: TimerDetails, area: Rect, buf: &mut Buffer, mut rng: StdRng) {
     let remaining = 1.0 - details.progress();
     let time = details.elapsed;
+    let mut palettes = INTERFERENCE_PALETTES;
+    palettes[1..].shuffle(&mut rng);
+    let epoch = (time / 10.0).floor() as usize;
+    let from = palettes[epoch.saturating_sub(1) % palettes.len()];
+    let to = palettes[epoch % palettes.len()];
+    let phase = (time.rem_euclid(10.0) / 2.5).min(1.0);
     sampled_field(area, buf, |u, v, aspect| {
         if u >= remaining {
             return [0.0; 3];
@@ -451,13 +460,15 @@ fn interference(details: TimerDetails, area: Rect, buf: &mut Buffer) {
         let wave =
             ((first * 24.0 - time * 0.65).sin() + (second * 24.0 - time * 0.65).sin()) * 0.25 + 0.5;
         let light = wave.powi(2) * 0.9 + 0.015;
-        let pink = (first - second + 0.5).clamp(0.0, 1.0);
+        let tint = (first - second + 0.5).clamp(0.0, 1.0);
         let highlight = wave.powi(10) * 0.2;
-        [
-            light * (0.06 + pink * 0.9) + highlight,
-            light * (0.32 - pink * 0.22) + highlight * 0.7,
-            light * (0.95 - pink * 0.42) + highlight,
-        ]
+        let distance_from_top_left = (u + 1.0 - v) * 0.5;
+        let blend = smoothstep(phase * 2.0 - distance_from_top_left);
+        std::array::from_fn(|channel| {
+            let a = from[0][channel] + tint * (from[1][channel] - from[0][channel]);
+            let b = to[0][channel] + tint * (to[1][channel] - to[0][channel]);
+            light * (a + (b - a) * blend) + highlight * [1.0, 0.7, 1.0][channel]
+        })
     });
 }
 
@@ -525,6 +536,70 @@ fn height_maps() -> (Vec<f64>, Vec<f64>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn interference_frame(seed: u64, elapsed: f64) -> Buffer {
+        let area = Rect::new(0, 0, 100, 40);
+        let mut effects = Effects::new();
+        effects.seed = seed;
+        let mut buf = Buffer::empty(area);
+        effects.draw(
+            "interference",
+            TimerDetails {
+                elapsed,
+                duration: 3600.0,
+            },
+            area,
+            &mut buf,
+        );
+        buf
+    }
+
+    #[test]
+    fn interference_palette_change_starts_at_ten_seconds_and_sweeps_diagonally() {
+        for elapsed in [0.0, 9.99, 10.0] {
+            assert_eq!(
+                interference_frame(0, elapsed),
+                interference_frame(42, elapsed),
+                "the opening palette must remain unchanged through {elapsed}s"
+            );
+        }
+        let first = interference_frame(0, 10.625);
+        let second = interference_frame(42, 10.625);
+        assert_ne!(first[(4, 3)], second[(4, 3)], "top left starts first");
+        for position in [(95, 3), (4, 38), (95, 38)] {
+            assert_eq!(
+                first[position], second[position],
+                "{position:?} changed too early"
+            );
+        }
+        let first = interference_frame(0, 12.5);
+        let second = interference_frame(42, 12.5);
+        for position in [(4, 3), (95, 3), (4, 38), (95, 38)] {
+            assert_ne!(
+                first[position], second[position],
+                "{position:?} did not crossfade"
+            );
+        }
+    }
+
+    #[test]
+    fn interference_palette_transitions_are_continuous_at_both_ends() {
+        use crate::color::color_rgb;
+        for elapsed in [10.0, 12.5, 20.0, 22.5, 60.0, 62.5] {
+            let before = interference_frame(42, elapsed - 0.000001);
+            let after = interference_frame(42, elapsed + 0.000001);
+            for (before, after) in before.content.iter().zip(&after.content) {
+                for (before, after) in [(before.fg, after.fg), (before.bg, after.bg)] {
+                    let (r, g, b) = color_rgb(before).unwrap();
+                    let (r2, g2, b2) = color_rgb(after).unwrap();
+                    assert!(
+                        r.abs_diff(r2).max(g.abs_diff(g2)).max(b.abs_diff(b2)) <= 1,
+                        "palette jumped at {elapsed}s: {before:?} -> {after:?}"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn lava_256_avoids_dense_high_contrast_stripes() {

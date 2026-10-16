@@ -77,8 +77,9 @@ and soft shadows. Shuffle feathers backgrounds while keeping one complete countd
 
 ![Static RGB buffer previews of all twelve renderers](docs/visuals/renderer-preview.png)
 
-New renderers use indexed-color terminal cells without a GPU or extra runtime,
-and are included in preview and shuffle:
+New renderers use true-color half-block cells for smooth gradients and two
+vertical samples per character, without a GPU or extra runtime. They work best
+in a 24-bit-color terminal and are included in preview and shuffle:
 
 - `aurora` (Aurora Veil): mint and violet light curtains retreat from right to left.
 - `tide` (Tidal Reservoir): a blue reservoir drains with a rippling waterline and

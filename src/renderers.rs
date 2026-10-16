@@ -157,6 +157,7 @@ impl Renderers {
                     fill,
                     shadow,
                     double,
+                    matches!(name, "aurora" | "tide" | "interference"),
                 );
             }
         }
@@ -287,6 +288,7 @@ impl Renderers {
         fill: &str,
         shadow: &str,
         double: bool,
+        dark_background: bool,
     ) {
         let rendered = self.fonts.render("ANSI Regular", value);
         let lines = trimmed_lines(&rendered);
@@ -301,6 +303,16 @@ impl Renderers {
         let x = (i32::from(area.width) - width * scale) / 2;
         let y = (i32::from(area.height) - height * scale) / 2;
         if width > i32::from(area.width) || height > i32::from(area.height) {
+            if dark_background {
+                let left = (i32::from(area.width) - value.chars().count() as i32) / 2;
+                for col in 0..value.chars().count() as i32 {
+                    let x = left + col;
+                    if x >= 0 && x < i32::from(area.width) {
+                        buf[(area.x + x as u16, area.y + area.height / 2)]
+                            .set_bg(Color::Rgb(0, 0, 0));
+                    }
+                }
+            }
             centered_text(buf, area, i32::from(area.height) / 2, value, gradient[0]);
             return;
         }
@@ -320,13 +332,12 @@ impl Renderers {
                             } else {
                                 ch.encode_utf8(&mut encoded)
                             };
+                            let px = x + col as i32 * scale + dx + offset;
+                            let py = y + row as i32 * scale + dy + offset;
                             put_text_layer(
                                 buf,
                                 area,
-                                (
-                                    x + col as i32 * scale + dx + offset,
-                                    y + row as i32 * scale + dy + offset,
-                                ),
+                                (px, py),
                                 symbol,
                                 if offset > 0 {
                                     mix(Color::Black, color, intensity)
@@ -335,6 +346,16 @@ impl Renderers {
                                 },
                                 offset > 0,
                             );
+                            if dark_background
+                                && px >= 0
+                                && py >= 0
+                                && px < i32::from(area.width)
+                                && py < i32::from(area.height)
+                                && let Some(cell) =
+                                    buf.cell_mut((area.x + px as u16, area.y + py as u16))
+                            {
+                                cell.set_bg(Color::Rgb(0, 0, 0));
+                            }
                         }
                     }
                 }

@@ -347,3 +347,31 @@ fn shader_fields_keep_a_readable_clock_in_small_viewports() {
         }
     }
 }
+
+#[test]
+fn shader_clock_stays_white_with_a_dark_background() {
+    use ratatui::style::Color;
+    let area = Rect::new(0, 0, 100, 35);
+    for name in ["aurora", "tide", "interference"] {
+        let mut buf = Buffer::empty(area);
+        Renderers::new().render(
+            name,
+            TimerDetails {
+                elapsed: 12.0,
+                duration: 60.0,
+            },
+            area,
+            &mut buf,
+        );
+        let clock: Vec<_> = buf
+            .content
+            .iter()
+            .filter(|cell| pace::color::color_rgb(cell.fg) == Some((255, 255, 255)))
+            .collect();
+        assert!(!clock.is_empty(), "{name}");
+        assert!(
+            clock.iter().all(|cell| cell.bg == Color::Rgb(0, 0, 0)),
+            "{name}: bright field bleeds through clock"
+        );
+    }
+}

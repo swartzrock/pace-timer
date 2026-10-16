@@ -408,3 +408,41 @@ fn tide_drains_from_full_through_half_to_empty() {
         assert!(!buf.content.iter().any(visible));
     }
 }
+
+#[test]
+fn shader_fields_use_true_color_and_independent_vertical_samples() {
+    use std::collections::HashSet;
+    let area = Rect::new(0, 0, 120, 40);
+    let mut effects = Effects::new();
+    for name in ["aurora", "tide", "interference"] {
+        let mut buf = Buffer::empty(area);
+        effects.draw(
+            name,
+            TimerDetails {
+                elapsed: 15.0,
+                duration: 60.0,
+            },
+            area,
+            &mut buf,
+        );
+        let colors: HashSet<_> = buf
+            .content
+            .iter()
+            .flat_map(|cell| [cell.fg, cell.bg])
+            .filter(|color| matches!(color, Color::Rgb(..)))
+            .collect();
+        assert!(
+            colors.len() > 64,
+            "{name}: only {} RGB shades",
+            colors.len()
+        );
+        assert!(
+            buf.content
+                .iter()
+                .filter(|cell| cell.symbol() == "▀" && cell.fg != cell.bg)
+                .count()
+                > 40,
+            "{name}: no independent vertical detail"
+        );
+    }
+}

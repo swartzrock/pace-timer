@@ -28,6 +28,41 @@ fn help_lists_every_original_renderer_and_tools() {
 }
 
 #[test]
+fn help_explains_the_original_typescript_tools() {
+    for args in [
+        vec![],
+        vec!["--help"],
+        vec!["tools"],
+        vec!["tools", "--help"],
+        vec!["help", "tools"],
+    ] {
+        let output = pace(&args);
+        assert!(output.status.success(), "{args:?}");
+        let text = String::from_utf8(output.stdout).unwrap();
+        for description in [
+            "Preview all renderers",
+            "FIGlet font samples and timer widths",
+            "color gradients and palettes",
+            "Print the Pace version",
+        ] {
+            assert!(text.contains(description), "{args:?}: {description}");
+        }
+    }
+}
+
+#[test]
+fn preview_keeps_the_original_tools_panel_frames() {
+    let output = pace(&["tools", "preview", "--no-color"]);
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    let panels = pace::renderers::PREVIEW_RENDERERS.len();
+    for corner in ['┌', '┐', '└', '┘'] {
+        assert_eq!(text.matches(corner).count(), panels, "missing {corner}");
+    }
+    assert!(text.contains('│'));
+}
+
+#[test]
 fn version_tool_runs_without_a_terminal() {
     let output = pace(&["tools", "version"]);
     assert!(output.status.success());
@@ -242,4 +277,39 @@ fn every_tool_honors_pipe_explicit_depth_and_no_color() {
             }
         }
     }
+}
+
+#[test]
+fn shader_fields_are_registered_for_selection_preview_and_shuffle() {
+    use pace::{
+        cli::{self, Command as CliCommand},
+        renderers::PREVIEW_RENDERERS,
+    };
+    let output = pace(&["tools", "preview"]);
+    assert!(output.status.success());
+    let preview = String::from_utf8(output.stdout).unwrap();
+    for name in ["aurora", "tide", "interference"] {
+        assert!(PREVIEW_RENDERERS.contains(&name));
+        for args in [
+            vec!["5m".into(), name.into()],
+            vec!["timer".into(), "5m".into(), name.into()],
+            vec![format!("5m:{name}")],
+        ] {
+            assert!(
+                matches!(cli::parse(&args).map(|parsed| parsed.command), Ok(CliCommand::Timer { renderer, .. }) if renderer == name)
+            );
+        }
+        let title = format!("{}{}", name[..1].to_uppercase(), &name[1..]);
+        assert!(preview.contains(&title), "{name}");
+    }
+}
+
+#[test]
+fn preview_preserves_true_color_and_half_block_backgrounds() {
+    let output = pace(&["tools", "preview", "--color-depth=truecolor"]);
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("\x1b[38;2;"), "missing RGB foregrounds");
+    assert!(text.contains("\x1b[48;2;"), "missing RGB backgrounds");
+    assert!(text.contains('▀'), "missing half-block detail");
 }

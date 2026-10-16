@@ -39,6 +39,25 @@ pub fn preview(out: &mut impl Write, policy: OutputPolicy) -> io::Result<()> {
             for x in 0..i32::from(area.width) {
                 put(&mut buf, area, x, 0, "─", 239);
             }
+            if area.width >= 2 && area.height >= 2 {
+                let right = i32::from(area.width) - 1;
+                let bottom = i32::from(area.height) - 1;
+                for x in 1..right {
+                    put(&mut buf, area, x, bottom, "─", 239);
+                }
+                for y in 1..bottom {
+                    put(&mut buf, area, 0, y, "│", 239);
+                    put(&mut buf, area, right, y, "│", 239);
+                }
+                for (x, y, symbol) in [
+                    (0, 0, "┌"),
+                    (right, 0, "┐"),
+                    (0, bottom, "└"),
+                    (right, bottom, "┘"),
+                ] {
+                    put(&mut buf, area, x, y, symbol, 239);
+                }
+            }
             let title = format!(" {}{} ", name[..1].to_uppercase(), &name[1..]);
             centered_text(&mut buf, area, 0, &title, 15);
         }

@@ -62,6 +62,9 @@ impl Effects {
             "circles" => self.circles(details, area, buf),
             "sine" => sine(details, area, buf),
             "lava" => self.lava(details, area, buf),
+            "aurora" => aurora(details, area, buf),
+            "tide" => tide(details, area, buf),
+            "interference" => interference(details, area, buf),
             _ => {}
         }
     }
@@ -367,6 +370,125 @@ fn bilinear(map: &[f64], size: usize, x: f64, y: f64) -> f64 {
     let lower =
         map[bottom * size + left] * (1.0 - x.fract()) + map[bottom * size + right] * x.fract();
     upper * (1.0 - y.fract()) + lower * y.fract()
+}
+
+fn aurora(details: TimerDetails, area: Rect, buf: &mut Buffer) {
+    let remaining = 1.0 - details.progress();
+    let time = details.elapsed;
+    sampled_field(area, buf, |u, v, aspect| {
+        if u >= remaining {
+            return [0.0; 3];
+        }
+        let x = (u - 0.5) * aspect * 2.0;
+        let y = (v - 0.5) * 2.0;
+        let mut color = [0.0; 3];
+        let ray_warp = (x * 3.0 + time * 0.2).sin() * 3.0;
+        for layer in 0..3 {
+            let layer = f64::from(layer);
+            let fold = 0.15
+                + layer * 0.09
+                + (x * 1.8 + time * 0.12 + layer * 1.9).sin() * 0.21
+                + (x * 4.1 - time * 0.09 + layer).sin() * 0.06;
+            let rays = 0.72 + 0.28 * (x * 22.0 + ray_warp + layer).sin();
+            let distance = y - fold;
+            let glow = (-distance.abs() * if distance > 0.0 { 4.0 } else { 7.0 }).exp();
+            let light = glow * rays * 0.53;
+            let mint = (0.5 + distance * 2.0 + (x * 0.8 + layer * 2.0).sin() * 0.3).clamp(0.0, 1.0);
+            color[0] += light * (0.55 - mint * 0.47);
+            color[1] += light * (0.12 + mint * 0.83);
+            color[2] += light * (0.9 - mint * 0.25);
+        }
+        color
+    });
+}
+
+fn tide(details: TimerDetails, area: Rect, buf: &mut Buffer) {
+    let remaining = 1.0 - details.progress();
+    let time = details.elapsed;
+    sampled_field(area, buf, |u, v, aspect| {
+        if remaining == 0.0 {
+            return [0.0; 3];
+        }
+        let x = (u - 0.5) * aspect * 2.0;
+        let wave = ((x * 5.0 + time * 0.7).sin() + (x * 8.0 - time * 0.5).sin())
+            * 0.012
+            * (PI * remaining).sin();
+        let level = remaining + wave;
+        if v >= level {
+            return [0.0; 3];
+        }
+        let depth = level - v;
+        let surface = (-depth * 3.0).exp();
+        let warp = (x * 2.5 + v * 4.0 + time * 0.15).sin() * 0.7
+            + (x * 4.0 - v * 3.0 - time * 0.1).cos() * 0.3;
+        let network = (x * 14.0 + v * 10.0 + warp * 3.0 + time * 0.3).sin()
+            * (x * 6.0 - v * 12.0 + warp * 2.0 - time * 0.15).sin();
+        let caustic = (1.0 - network.abs()).powi(12) * (-depth * 1.4).exp();
+        let edge = if remaining < 1.0 {
+            (-depth * 140.0).exp() * 0.35
+        } else {
+            0.0
+        };
+        [
+            0.006 + caustic * 0.08 + edge * 0.45,
+            0.035 + surface * 0.28 + caustic * 0.27 + edge * 0.8,
+            0.14 + surface * 0.3 + caustic * 0.34 + edge,
+        ]
+    });
+}
+
+fn interference(details: TimerDetails, area: Rect, buf: &mut Buffer) {
+    let remaining = 1.0 - details.progress();
+    let time = details.elapsed;
+    sampled_field(area, buf, |u, v, aspect| {
+        if u >= remaining {
+            return [0.0; 3];
+        }
+        let x = (u - 0.5) * aspect * 2.0;
+        let y = (v - 0.5) * 2.0;
+        let first = (x + 0.47).hypot(y - 0.13);
+        let second = (x - 0.5).hypot(y + 0.17);
+        let wave =
+            ((first * 24.0 - time * 0.65).sin() + (second * 24.0 - time * 0.65).sin()) * 0.25 + 0.5;
+        let light = wave.powi(2) * 0.9 + 0.015;
+        let pink = (first - second + 0.5).clamp(0.0, 1.0);
+        let highlight = wave.powi(10) * 0.2;
+        [
+            light * (0.06 + pink * 0.9) + highlight,
+            light * (0.32 - pink * 0.22) + highlight * 0.7,
+            light * (0.95 - pink * 0.42) + highlight,
+        ]
+    });
+}
+
+fn sampled_field(area: Rect, buf: &mut Buffer, sample: impl Fn(f64, f64, f64) -> [f64; 3]) {
+    if area.is_empty() {
+        return;
+    }
+    let width = f64::from(area.width);
+    let height = f64::from(area.height);
+    let aspect = width / (height * 2.0);
+    let rgb = |channels: [f64; 3]| {
+        let [r, g, b] =
+            channels.map(|channel| (channel.clamp(0.0, 1.0).sqrt() * 255.0).round() as u8);
+        Color::Rgb(r, g, b)
+    };
+    for row in 0..area.height {
+        for col in 0..area.width {
+            let u = (f64::from(col) + 0.5) / width;
+            let top = rgb(sample(u, 1.0 - (f64::from(row) + 0.25) / height, aspect));
+            let bottom = rgb(sample(u, 1.0 - (f64::from(row) + 0.75) / height, aspect));
+            if let Some(cell) = buf.cell_mut((area.x + col, area.y + row)) {
+                cell.set_symbol(if top == Color::Rgb(0, 0, 0) && top == bottom {
+                    " "
+                } else {
+                    "▀"
+                })
+                .set_fg(top)
+                .set_bg(bottom);
+            }
+        }
+    }
 }
 
 fn reflected(start: f64, velocity: f64, elapsed: f64, limit: f64) -> f64 {

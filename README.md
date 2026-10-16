@@ -77,7 +77,34 @@ and soft shadows. Shuffle feathers backgrounds while keeping one complete countd
 
 ![Static RGB buffer previews of all twelve renderers](docs/visuals/renderer-preview.png)
 
+New renderers use true-color half-block cells for smooth gradients and two
+vertical samples per character, without a GPU or extra runtime. They work best
+in a 24-bit-color terminal and are included in preview and shuffle:
+
+- `aurora` (Aurora Veil): mint and violet light curtains retreat from right to left.
+- `tide` (Tidal Reservoir): a blue reservoir drains with a rippling waterline and
+  moving underwater caustics.
+- `interference` (Interference Field): blue and pink ripples from two sources
+  settle from right to left as time runs out.
+
 ```sh
+cargo run --release -- 5m aurora
+cargo run --release -- 5m tide
+cargo run --release -- 5m interference
+```
+
+All four TypeScript tools are available. Run `pace tools` or `pace help tools`
+for their usage:
+
+| Command | Output |
+| --- | --- |
+| `pace tools preview` | Framed previews of every renderer except shuffle, in pairs |
+| `pace tools allfonts` | All 289 FIGlet fonts, the sample `23 Quick foxes`, and maximum timer widths |
+| `pace tools colorblocks` | The original single/double gradients and named color palettes |
+| `pace tools version` | The current Pace version |
+
+```sh
+cargo run --release -- tools
 cargo run --release -- tools preview
 cargo run --release -- tools allfonts
 cargo run --release -- tools colorblocks

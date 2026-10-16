@@ -17,6 +17,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     );
     match parsed.command {
         Command::Help => print!("{}", pace::cli::help()),
+        Command::ToolsHelp => print!("{}", pace::cli::tools_help()),
         Command::Version => println!("{}", env!("CARGO_PKG_VERSION")),
         Command::Timer { duration, renderer } => {
             pace::terminal::run(duration, &renderer, policy, parsed.options.show_fps)?

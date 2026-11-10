@@ -69,6 +69,10 @@ cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
+For user-facing changes, add a release note with `npm ci` and
+`npm run changeset` (Node.js 24). See the [release guide](.changeset/README.md)
+for Changesets commands, repository setup, and the GitHub release process.
+
 ## License
 
 [ISC](LICENSE). Pace is a Rust port of the [original TypeScript app](https://github.com/swartzrock/pace).

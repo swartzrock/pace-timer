@@ -29,3 +29,6 @@ __pycache__/
 
 .DS_Store
 
+# Changesets release tooling
+node_modules/
+

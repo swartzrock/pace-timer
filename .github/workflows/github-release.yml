@@ -1,0 +1,74 @@
+name: GitHub Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+concurrency: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
+
+jobs:
+  build:
+    if: >-
+      github.event.pull_request.merged &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'changeset-release/main' &&
+      github.event.pull_request.title == 'chore: release'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-15
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_COMMIT }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo test --locked --all-targets --target ${{ matrix.target }}
+      - run: cargo build --locked --release --target ${{ matrix.target }}
+      - run: python3 tests/terminal_smoke.py target/${{ matrix.target }}/release/pace
+      - name: Package binary
+        env:
+          TARGET: ${{ matrix.target }}
+        run: tar -czf "pace-${TARGET}.tar.gz" -C "target/${TARGET}/release" pace -C "$GITHUB_WORKSPACE" LICENSE assets/FIGLET-LICENSE.txt assets/README.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pace-${{ matrix.target }}
+          path: pace-*.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_COMMIT }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: node scripts/prepare-release.mjs > "$RUNNER_TEMP/release-notes.md"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pace-*
+          merge-multiple: true
+          path: dist
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          gh release create "$VERSION" dist/*.tar.gz --target "$RELEASE_COMMIT" --notes-file "$RUNNER_TEMP/release-notes.md" --title "$VERSION"

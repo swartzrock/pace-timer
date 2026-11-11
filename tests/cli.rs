@@ -93,7 +93,10 @@ fn preview_keeps_the_original_tools_panel_frames() {
 fn version_tool_runs_without_a_terminal() {
     let output = pace(&["tools", "version"]);
     assert!(output.status.success());
-    assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), "0.3.0");
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap().trim(),
+        env!("CARGO_PKG_VERSION")
+    );
 }
 
 #[test]

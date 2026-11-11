@@ -22,7 +22,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npm run changeset -- status --since origin/main
+      # Generated release PRs have already consumed their changesets.
+      - if: github.head_ref != 'changeset-release/main' || github.event.pull_request.head.repo.full_name != github.repository
+        run: npm run changeset -- status --since origin/main
 
   test:
     name: Test (${{ matrix.os }})
